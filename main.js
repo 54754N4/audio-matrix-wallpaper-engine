@@ -18,7 +18,33 @@ const randOffset = (offset, variability) => {
 
 const variableFontSize = () => randOffset(config.fontSize, config.fontSizeVariability);
 
-const variableDropCount = () => Math.round(randOffset(2, 1));
+const variableDropCount = () => Math.round(randOffset(4, 1));
+
+const collisionDectection = Object.freeze({
+	rect2rect: (x1, y1, w1, h1, x2, y2, w2, h2) => x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2,
+	circle2circle: (x1, y1, radius1, x2, y2, radius2) => Math.sqrt((x1 - x2)**2 + (y1 - y2)**2) < radius1 + radius2,
+});
+
+/**
+ * Parametric Gaussian: f : x -> a * exp(-(x-b)^2/(2*c^2))
+ * where: 	a - height of the curve's peak
+ * 			b - the position of the center of the peak
+ * 			c - the std/gaussian RMS width of the "bell"
+ */
+const parametricGaussian = (x, a=1, b=0, c=1/Math.sqrt(2)) => {
+	return a * Math.exp( -Math.pow(x - b, 2) / (2 * Math.pow(c, 2)))
+};
+
+const gaussian = x => parametricGaussian(x);	// reduces to f: x -> exp(-x^2)
+
+const colorDistance = (c1, c2, alpha=false) => Math.sqrt([
+		c2.R - c1.R,
+		c2.G - c1.G,
+		c2.B - c1.B,
+		alpha ? c2.A-c1.A : 0
+	].filter(e => e)
+	.map(e => e**2)
+	.reduce((acc, curr) => acc + curr, 0))
 
 class Droplet {
 	constructor(x) {
@@ -39,7 +65,7 @@ class Matrix {
 	realLength = () => this.drops.length;
 
 	length = () => this.drops.map(drop => drop.x)
-		.reduce((acc, curr) => Math.max(acc, curr));
+		.reduce((acc, curr) => Math.max(acc, curr), 0);
 
 	get = i => this.drops[i];
 
@@ -65,19 +91,33 @@ class Matrix {
 
 	draw = () => {
 		const len = this.realLength();
-		for(let i = 0; i < len; i++) {
+		for(let i = 0, drop = this.drops[0]; i < len; drop.y += drop.dx * drop.offset, drop = this.drops[++i]) {
 			const text = config.alphabet[Math.floor(Math.random() * config.alphabet.length)];
-			const drop = this.drops[i];
-			ctx.fillText(text, drop.x * drop.fontSize, drop.y * drop.fontSize);
-			if (drop.dx > 0 && drop.y * drop.fontSize >= canvas.height && Math.random() > config.rainResetChance) {
+			const actualX = Math.floor(drop.x * drop.fontSize);
+			const actualY = Math.floor(drop.y * drop.fontSize);
+			const overAlbum = collisionDectection.rect2rect(
+				actualX, actualY - drop.fontSize,
+				drop.fontSize, drop.fontSize,
+				config.albumBoundingBox.x, config.albumBoundingBox.y,
+				config.albumBoundingBox.width, config.albumBoundingBox.height
+			);
+			if (overAlbum) {
+				ctx.save();
+				ctx.fillStyle = getInvertedForegroundStyle();
+			}
+			ctx.fillText(text, actualX, actualY);
+			if (overAlbum) {
+				ctx.restore();
+				continue;	// optimisation - we know it doesn't need reset at this point
+			}
+			if (drop.dx > 0 && actualY >= canvas.height && Math.random() > config.rainResetChance) {
 				drop.y = 0;
 				drop.fontSize = variableFontSize();
 			}
-			if (drop.dx < 0 && drop.y * drop.fontSize <= config.fontSize) {
+			if (drop.dx < 0 && actualY <= config.fontSize) {
 				drop.y = canvas.height;
 				drop.fontSize = variableFontSize();
 			}
-			drop.y += drop.dx * drop.offset;
 		}
 	}
 }
@@ -105,6 +145,25 @@ const parseHexColor = hex => {
 	};
 };
 
+const colorInverted = ({R, G, B}) => ({R: 255-R, G: 255-G, B: 255-B});
+
+const clearExcept = (x, y, w, h, fill=true) => {
+	const target = fill ? ctx.fillRect : ctx.clearRect;
+	target.apply(ctx, [0, 0, canvas.width, y]);		// top
+	target.apply(ctx, [0, y + h, canvas.width, canvas.height]);	// bottom
+	target.apply(ctx, [0, 0, x, canvas.height]);	// left
+	target.apply(ctx, [x + w, 0, canvas.width, canvas.height]);	// right
+};
+
+const clearExceptAlbum = (fill=true) => {
+	if (albumCoverArt === null) {	// didn't receive from WE yet
+		const target = fill ? ctx.fillRect : ctx.clearRect;
+		target.apply(ctx, [0, 0, canvas.width, canvas.height]);
+		return;
+	}
+	clearExcept(config.albumBoundingBox.x, config.albumBoundingBox.y, config.albumBoundingBox.width, config.albumBoundingBox.height, fill);
+};
+
 const updateCanvas = (resize, fill=true) => {
 	if (resize) {
 		canvas.height = window.innerHeight;
@@ -113,26 +172,30 @@ const updateCanvas = (resize, fill=true) => {
 		if (matrix && matrix.length() != preferred)
 			matrix.resize(preferred);
 	}
-	ctx.fillStyle = `rgba(${config.backgroundColour.R}, ${config.backgroundColour.G}, ${config.backgroundColour.B}, 0.1)`; // 0.04
-	if (fill)
-		ctx.fillRect(0, 0, canvas.width, canvas.height);
-	else
-		ctx.clearRect(0, 0, canvas.width, canvas.height);
-	ctx.fillStyle = `rgb(${config.foregroundColour.R}, ${config.foregroundColour.G}, ${config.foregroundColour.B}, 0.9)`;
+	ctx.fillStyle = getBackgroundStyle();
+	(fill ? ctx.fillRect : ctx.clearRect).apply(ctx, [0, 0, canvas.width, canvas.height]);
+	ctx.fillStyle = getForegroundStyle();
 	ctx.font = config.fontSize + "px arial";
+};
+
+const removeRainGlareHack = () => {
+	ctx.fillStyle = getBackgroundStyle();
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
+	ctx.fillStyle = getForegroundStyle();
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
 };
 
 const setupSpinners = () => {
 	document.getElementById("color_spinner_red").onmousemove = function(e) {
 		decideColor(e.clientX, document.getElementById("color_spinner_red").offsetWidth, "red");
-	}
+	};
 	document.getElementById("color_spinner_green").onmousemove = function(e) {
 		decideColor(e.clientY, document.getElementById("color_spinner_green").offsetHeight, "green");
-	}
+	};
 	document.getElementById("color_spinner_blue").onmousemove = function(e) {
 		var max = document.getElementById("color_spinner_blue").offsetWidth;
 		decideColor(max - e.clientX, max, "blue");
-	}
+	};
 };
 
 const setupWallpaperEngineMediaIntegration = () => {
@@ -183,6 +246,8 @@ const paramMapping = {
 				config.foregroundColour.G = color[1];
 				config.foregroundColour.B = color[2];
 			}
+			config.invertedForegroundColour = colorInverted(config.foregroundColour);
+			removeRainGlareHack();
 		},
 	},
 	bgcolour: {
@@ -200,6 +265,8 @@ const paramMapping = {
 				config.backgroundColour.G = color[1];
 				config.backgroundColour.B = color[2];
 			}
+			config.invertedBackgroundColour = colorInverted(config.backgroundColour);
+			removeRainGlareHack();
 		},
 	},
 	colorspinners: {
@@ -253,7 +320,11 @@ const config = {
 	fontSizeVariability: paramMapping.fontsizevariability.default,
 	animationFrameDuration: paramMapping.animationframeduration.default,
 	foregroundColour: paramMapping.fgcolour.default,
+	invertedForegroundColour: colorInverted(paramMapping.fgcolour.default),
 	backgroundColour: paramMapping.bgcolour.default,
+	invertedBackgroundColour: colorInverted(paramMapping.bgcolour.default),
+	foregroundTransparency: 0.9,
+	backgroundTransparency: 0.15, // 0.04
 	colorSpinners: paramMapping.colorspinners.default,
 	rainResetChance: paramMapping.rainresetchance.default,
 	audioPlaybackState: 2,
@@ -262,7 +333,21 @@ const config = {
 	audioReactThreshold: paramMapping.audioreactthreshold.default,
 	audioReactFreeze: paramMapping.audioreactfreeze.default,
 	audioChangeColour: paramMapping.audiochangecolour.default,	// overrides colorSpinners
+	albumBoundingBox: { x:0, y:0, width:0, height:0 },
 };
+
+const changeColors = (fgColour, bgColour) => {
+	config.invertedForegroundColour = colorInverted(config.foregroundColour = fgColour);
+	config.invertedBackgroundColour = colorInverted(config.backgroundColour = bgColour);
+	updateCanvas(false, false);
+	removeRainGlareHack();
+};
+
+const getColorStyle = ({R, G, B}, alpha=1, space='rgb') => `${space}(${R}, ${G}, ${B}, ${alpha})`;
+const getForegroundStyle = () => getColorStyle(config.foregroundColour, config.foregroundTransparency);
+const getInvertedForegroundStyle = () => getColorStyle(config.invertedForegroundColour, config.foregroundTransparency);
+const getBackgroundStyle = () => getColorStyle(config.backgroundColour, config.backgroundTransparency);
+const getInvertedBackgroundStyle = () => getColorStyle(config.invertedBackgroundColour, config.backgroundTransparency);
 
 const MAX_AUDIO_ARRAY_SIZE = 128;
 const MAX_CHANNEL_SIZE = MAX_AUDIO_ARRAY_SIZE/2;
@@ -280,66 +365,50 @@ const wallpaperAudioListener = audioArray => {
 // Media event properties docs: https://docs.wallpaperengine.io/en/web/audio/media.html#available-media-integration-listeners
 
 const wallpaperMediaStatusListener = event => {
-	console.log(event);
+	console.log("status", event); // todo remove
 };
 
 const wallpaperMediaPropertiesListener = event => {
-	console.log(event);
-	// todo debug
-	if (event.thumbnail) {
-		const image = new Image();
-		image.src = event.thumbnail;
-		ctx.drawImage(image, 0,0,500,500);
-		
-	}
-	console.log(event.thumbnail);
+	console.log("props", event); // todo remove
 	trackTitle.textContent = event.title;
 	artist.textContent = event.artist;
 };
 
 const wallpaperMediaThumbnailListener = event => {
-	console.log(event);
+	console.log("thumbnail", event);	// todo remove
 	albumCoverArt.src = event.thumbnail;
+	config.albumBoundingBox = albumCoverArt.getBoundingClientRect();
+	if (config.albumBoundingBox.width === 0) {
+		const imageSquareSideSize = 300;
+		config.albumBoundingBox.x -= imageSquareSideSize/2;
+		config.albumBoundingBox.y -= imageSquareSideSize/2;
+		config.albumBoundingBox.width = config.albumBoundingBox.height = imageSquareSideSize;
+	}
 	document.body.style['background-color'] = event.primaryColor;
 	trackTitle.style.color = event.textColor;
 	artist.style.color = event.textColor;
-	if (config.audioChangeColour) {
-		config.foregroundColour = parseHexColor(event.textColor);
-		config.backgroundColour = parseHexColor(event.primaryColor);
-		updateCanvas(false, false);
-	}
+	if (config.audioChangeColour)
+		changeColors(parseHexColor(event.textColor), parseHexColor(event.primaryColor));
 };
 
 const wallpaperMediaPlaybackListener = event => {
-	console.log("playback", event);
+	console.log("playback", event);	// todo remove
 	config.audioPlaybackState = event.state;
 	if (event.state !== window.wallpaperMediaIntegration.PLAYBACK_PLAYING)
 		config.rainResetChance = _rainResetChance;
 };
 
-/**
- * Parametric Gaussian: f : x -> a * exp(-(x-b)^2/(2*c^2))
- * where: 	a - height of the curve's peak
- * 			b - the position of the center of the peak
- * 			c - the std/gaussian RMS width of the "bell"
- */
-const parametricGaussian = (x, a=1, b=0, c=1/Math.sqrt(2)) => {
-	return a * Math.exp( -Math.pow(x - b, 2) / (2 * Math.pow(c, 2)))
-};
-
-const gaussian = x => parametricGaussian(x);	// reduces to f: x -> exp(-x^2)
-
 const wallpaperMediaTimelineListener = event => {
-	console.log("timeline", event);	// TODO remove
+	console.log("timeline", event);	// todo remove
 	if (!config.audioFadeInRain || config.audioPlaybackState !== window.wallpaperMediaIntegration.PLAYBACK_PLAYING)
 		return;
-	const percentage = event.position/event.duration;
+	const percentage = event.position / event.duration;
 	const isStart = event.position < config.audioFadeInDuration;
 	if (isStart || event.position > event.duration - config.audioFadeInDuration)
 		config.rainResetChance = parametricGaussian(percentage, 1, isStart ? 0 : 1);
 	else
 		config.rainResetChance = _rainResetChance;
-}
+};
 
 const hookWallpaperEngine = () => [
 		['wallpaperRegisterAudioListener', wallpaperAudioListener],
