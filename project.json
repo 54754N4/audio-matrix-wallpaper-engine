@@ -1,0 +1,182 @@
+{
+	"contentrating" : "Everyone",
+	"description" : "RGB sliders can be manipulated by hovering with the mouse as such (or just disable and control from wallpaper engine 🤷):\n- Red: Top of the screen (left: 0, right: 255)\n- Green: Right of the screen (top: 0, bottom: 255)\n- Blue: Bottom of the screen (right: 0, left: 255)\n\nAudio reaction can be disabled or you can choose between the default:\n- rain drops flowing backwards (if their respective frequencies have sound above a threshold)\n- or alternatively rain drops freeze on audio\n\nRain can change color based on the playing media.",
+	"file" : "index.html",
+	"general" : 
+	{
+		"properties" : 
+		{
+			"alphabet" : 
+			{
+				"index" : 0,
+				"order" : 100,
+				"text" : "alphabet",
+				"type" : "textinput",
+				"value" : "АБВГДЕЁЖЗИЙКЛМНОавгдеёжзийклмноПРСТУФХЦЧШЩЪЫЬЭЮЯпрстуфхцчшщъыьэюяモエヤキオカ7ケサスz152ヨタワ4ネヌナ98ヒ0ホア3ウ セ¦:\\\"꞊ミラリ╌ツテニハソ▪—<>0|+*コシマムメ"
+			},
+			"animationframeduration" : 
+			{
+				"fraction" : false,
+				"index" : 8,
+				"max" : 1000,
+				"min" : 0,
+				"order" : 108,
+				"text" : "animationframeduration",
+				"type" : "slider",
+				"value" : 30
+			},
+			"audioalbumxpercent" : 
+			{
+				"fraction" : false,
+				"index" : 13,
+				"max" : 100,
+				"min" : 0,
+				"order" : 113,
+				"text" : "audioalbumxpercent",
+				"type" : "slider",
+				"value" : 50
+			},
+			"audioalbumypercent" : 
+			{
+				"fraction" : false,
+				"index" : 14,
+				"max" : 100,
+				"min" : 0,
+				"order" : 114,
+				"text" : "audioalbumypercent",
+				"type" : "slider",
+				"value" : 50
+			},
+			"audiochangecolour" : 
+			{
+				"index" : 9,
+				"order" : 109,
+				"text" : "audiochangecolour",
+				"type" : "bool",
+				"value" : true
+			},
+			"audiofadeinduration" : 
+			{
+				"condition" : "audiofadeinrain.value",
+				"fraction" : true,
+				"index" : 11,
+				"max" : 30,
+				"min" : 0,
+				"order" : 111,
+				"precision" : 2,
+				"step" : 0.1,
+				"text" : "audiofadeinduration",
+				"type" : "slider",
+				"value" : 10
+			},
+			"audiofadeinrain" : 
+			{
+				"index" : 10,
+				"order" : 110,
+				"text" : "audiofadeinrain",
+				"type" : "bool",
+				"value" : true
+			},
+			"audioreactfreeze" : 
+			{
+				"index" : 12,
+				"order" : 112,
+				"text" : "audioreactfreeze",
+				"type" : "bool",
+				"value" : false
+			},
+			"audioreactthreshold" : 
+			{
+				"fraction" : true,
+				"index" : 7,
+				"max" : 1,
+				"min" : 0,
+				"order" : 107,
+				"precision" : 4,
+				"step" : 0.001,
+				"text" : "audioreactthreshold",
+				"type" : "slider",
+				"value" : 0.1
+			},
+			"bgcolour" : 
+			{
+				"index" : 4,
+				"order" : 104,
+				"text" : "bgcolour",
+				"type" : "color",
+				"value" : "0 0 0"
+			},
+			"colorspinners" : 
+			{
+				"index" : 5,
+				"order" : 105,
+				"text" : "colorspinners",
+				"type" : "bool",
+				"value" : false
+			},
+			"fgcolour" : 
+			{
+				"index" : 3,
+				"order" : 103,
+				"text" : "fgcolour",
+				"type" : "color",
+				"value" : "1 0 0"
+			},
+			"fontsize" : 
+			{
+				"fraction" : false,
+				"index" : 1,
+				"max" : 50,
+				"min" : 10,
+				"order" : 101,
+				"text" : "fontsize",
+				"type" : "slider",
+				"value" : 15
+			},
+			"fontsizevariability" : 
+			{
+				"fraction" : false,
+				"index" : 2,
+				"max" : 5,
+				"min" : 0,
+				"order" : 102,
+				"text" : "fontsizevariability",
+				"type" : "slider",
+				"value" : 3
+			},
+			"rainresetchance" : 
+			{
+				"fraction" : true,
+				"index" : 6,
+				"max" : 1,
+				"min" : 0,
+				"order" : 106,
+				"precision" : 4,
+				"step" : 0.001,
+				"text" : "rainresetchance",
+				"type" : "slider",
+				"value" : 0.975
+			},
+			"schemecolor" : 
+			{
+				"order" : 0,
+				"text" : "ui_browse_properties_scheme_color",
+				"type" : "color",
+				"value" : "0 0 0"
+			}
+		},
+		"supportsaudioprocessing" : true
+	},
+	"preview" : "preview.gif",
+	"ratingsex" : "none",
+	"ratingviolence" : "none",
+	"snapshotformat" : 0,
+	"snapshotoverlay" : "",
+	"tags" : [ "Abstract" ],
+	"title" : "Responsive Matrix",
+	"type" : "web",
+	"version" : 12,
+	"visibility" : "public",
+	"workshopid" : "1605157424",
+	"workshopurl" : "steam://url/CommunityFilePage/1605157424"
+}

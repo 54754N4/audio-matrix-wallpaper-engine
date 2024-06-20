@@ -1,0 +1,104 @@
+* {	/*basic reset */
+    margin: 0;
+    padding: 0;
+}
+
+body {
+	background: rgb(0,0,0,0);
+}
+
+html, body {
+	width:100%;
+	height:100%;
+	overflow:hidden;
+}
+
+#canvas_matrix {
+	position: absolute;
+	z-index: 1;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+}
+
+#color_spinner_red {
+	position: fixed;
+	top: 0;
+	left: 0;
+	height: 2vh;
+	width: 99vw;
+}
+
+#color_spinner_green {
+	position: fixed;
+	top: 0;
+	right: 0;
+	height: 100vh;
+	width: 1vw;
+}
+
+#color_spinner_blue {
+	position: fixed;
+	bottom: 0;
+	left: 0;
+	height: 2vh;
+	width: 99vw;
+}
+
+.spinner {
+	z-index: 10;
+}
+
+/* Media related */
+
+.container {
+	position: relative;
+	height:100vh;
+	width:100vw;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+.container canvas, .box {
+	position: absolute;
+}
+
+.box {
+	z-index: 1;
+	width: 50vw;
+	height: 30vh;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	mix-blend-mode: overlay;	/* change to 'difference' when u have image2ascii */
+}
+
+.textBox {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+}
+
+#albumCoverArt {
+	display: block;
+	margin-left: auto;
+	margin-right: auto;
+	overflow: scroll;
+}
+
+#trackTitle {
+	font-size: 3vh;
+	margin-bottom: 2vh;
+	font-family: sans-serif;
+	text-align: center;
+}
+
+#artist {
+	font-size: 2vh;
+	font-family: sans-serif;
+	text-align: center;
+}
