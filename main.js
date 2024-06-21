@@ -9,6 +9,13 @@ let trackTitle = null;
 let artist = null;
 let _rainResetChance;
 
+const Predicates = Object.freeze({
+	NEVER: () => false,
+	ALWAYS: () => true,
+
+	negate: predicate => (...args) => !predicate(...args),
+});
+
 const range = count => [...Array(Math.round(count)).keys()];
 
 const randOffset = (offset, variability) => {
@@ -16,9 +23,28 @@ const randOffset = (offset, variability) => {
 	return offset + variable;
 };
 
-const variableFontSize = () => randOffset(config.fontSize, config.fontSizeVariability);
+const scale = (num, in_min, in_max, out_min, out_max) => (num - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 
-const variableDropCount = () => Math.round(randOffset(4, 1));
+const parseBool = value => typeof(value) === 'boolean' ? value : value === 'true';
+
+const parseColor = colorStr => {
+	var color = colorStr.split(' ').map(c => Math.ceil(c * 255));
+	if (color.length == 3)
+		return color;
+	console.log("Error we don't have 3 components to convert to colour");
+	return colorStr;
+};
+
+const parseHexColor = hex => {
+	hex = hex.replace('#', '');
+	return {
+		R: parseInt(hex.substring(0, 2), 16),
+		G: parseInt(hex.substring(2, 4), 16),
+		B: parseInt(hex.substring(4, 6), 16),
+	};
+};
+
+const colorInverted = ({R, G, B}) => ({R: 255-R, G: 255-G, B: 255-B});
 
 const collisionDectection = Object.freeze({
 	rect2rect: (x1, y1, w1, h1, x2, y2, w2, h2) => x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2,
@@ -54,6 +80,47 @@ class Droplet {
 		this.offset = 1;
 		this.fontSize = config.fontSize;
 	}
+
+	get actualX() {
+		return Math.floor(this.x * this.fontSize);
+	}
+
+	get actualY() {
+		return Math.floor(this.y * this.fontSize);
+	}
+	
+	step = (dx=this.dx, offset=this.offset) => this.y += dx * offset;
+	stepUp = (offset=this.offset) => this.step(-1, offset);
+	stepDown = (offset=this.offset) => this.step(1, offset);
+
+	render() {
+		const actualX = this.actualX;
+		const actualY = this.actualY;
+		const overAlbum = collisionDectection.rect2rect(
+			actualX, actualY - this.fontSize,
+			this.fontSize, this.fontSize,
+			config.albumBoundingBox.x, config.albumBoundingBox.y,
+			config.albumBoundingBox.width, config.albumBoundingBox.height
+		);
+		if (overAlbum) {
+			ctx.save();
+			ctx.fillStyle = getInvertedForegroundStyle();
+		}
+		const text = config.alphabet[Math.floor(Math.random() * config.alphabet.length)];
+		ctx.fillText(text, actualX, actualY);
+		if (overAlbum) {
+			ctx.restore();
+			return;	// optimisation - we know it doesn't need reset at this point
+		}
+		if (this.dx > 0 && actualY >= canvas.height && Math.random() > config.rainResetChance) {
+			this.y = 0;
+			this.fontSize = variableFontSize();
+		}
+		if (this.dx < 0 && actualY <= config.fontSize) {
+			this.y = canvas.height;
+			this.fontSize = variableFontSize();
+		}
+	}
 }
 
 class Matrix {
@@ -62,90 +129,59 @@ class Matrix {
 			.flatMap(x => range(variableDropCount()).map(() => new Droplet(x)));
 	}
 
-	realLength = () => this.drops.length;
+	get dropCount() {
+		return this.drops.length;
+	}
 
-	length = () => this.drops.map(drop => drop.x)
-		.reduce((acc, curr) => Math.max(acc, curr), 0);
+	get length() {
+		return this.drops.map(drop => drop.x)
+			.reduce((acc, curr) => Math.max(acc, curr), 0);
+	}
 
 	get = i => this.drops[i];
 
-	resize = preferred => {
-		const current = this.length();
+	resize(preferred) {
+		const current = this.length;
 		if (preferred === current)
 			return;
 		const target = preferred > current ? this.expand : this.shrink;
 		target(preferred);
 	}
 
-	expand = newSize => {
-		const len = this.length();
+	expand(newSize) {
+		const len = this.length;
 		range(newSize - len)
 			.map(i => i + len)
 			.flatMap(x => range(variableDropCount()).map(() => new Droplet(x)))
 			.forEach(drop => this.drops.push(drop));
 	}
 
-	shrink = newSize => {
-		this.drops = this.drops.filter(drop => drop.x < newSize);
+	shrink = newSize => this.drops = this.drops.filter(drop => drop.x < newSize);
+
+	*droplets() {
+		const len = this.dropCount;
+		for(let i = 0, drop = this.drops[0]; i < len; drop = this.drops[++i])
+			yield drop;
 	}
 
-	draw = () => {
-		const len = this.realLength();
-		for(let i = 0, drop = this.drops[0]; i < len; drop.y += drop.dx * drop.offset, drop = this.drops[++i]) {
-			const text = config.alphabet[Math.floor(Math.random() * config.alphabet.length)];
-			const actualX = Math.floor(drop.x * drop.fontSize);
-			const actualY = Math.floor(drop.y * drop.fontSize);
-			const overAlbum = collisionDectection.rect2rect(
-				actualX, actualY - drop.fontSize,
-				drop.fontSize, drop.fontSize,
-				config.albumBoundingBox.x, config.albumBoundingBox.y,
-				config.albumBoundingBox.width, config.albumBoundingBox.height
-			);
-			if (overAlbum) {
-				ctx.save();
-				ctx.fillStyle = getInvertedForegroundStyle();
-			}
-			ctx.fillText(text, actualX, actualY);
-			if (overAlbum) {
-				ctx.restore();
-				continue;	// optimisation - we know it doesn't need reset at this point
-			}
-			if (drop.dx > 0 && actualY >= canvas.height && Math.random() > config.rainResetChance) {
-				drop.y = 0;
-				drop.fontSize = variableFontSize();
-			}
-			if (drop.dx < 0 && actualY <= config.fontSize) {
-				drop.y = canvas.height;
-				drop.fontSize = variableFontSize();
-			}
-		}
+	forEach(consumer) {
+		for (const droplet of this.droplets())
+			consumer(droplet);
+	}
+
+	allMatch(predicate) {
+		for (const droplet of this.droplets())
+			if (!predicate(droplet))
+				return false;
+		return true;
 	}
 }
 
 const getPreferredDropCount = () => Math.round(canvas.width / config.fontSize);
 
-const scale = (num, in_min, in_max, out_min, out_max) => (num - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+const variableFontSize = () => randOffset(config.fontSize, config.fontSizeVariability);
 
-const parseBool = value => typeof(value) === 'boolean' ? value : value === 'true';
-
-const parseColor = colorStr => {
-	var color = colorStr.split(' ').map(c => Math.ceil(c * 255));
-	if (color.length == 3)
-		return color;
-	console.log("Error we don't have 3 components to convert to colour");
-	return colorStr;
-};
-
-const parseHexColor = hex => {
-	hex = hex.replace('#', '');
-	return {
-		R: parseInt(hex.substring(0, 2), 16),
-		G: parseInt(hex.substring(2, 4), 16),
-		B: parseInt(hex.substring(4, 6), 16),
-	};
-};
-
-const colorInverted = ({R, G, B}) => ({R: 255-R, G: 255-G, B: 255-B});
+const variableDropCount = () => Math.round(randOffset(4, 1));
 
 const clearExcept = (x, y, w, h, fill=true) => {
 	const target = fill ? ctx.fillRect : ctx.clearRect;
@@ -169,7 +205,7 @@ const updateCanvas = (resize, fill=true) => {
 		canvas.height = window.innerHeight;
 		canvas.width = window.innerWidth;
 		const preferred = getPreferredDropCount();
-		if (matrix && matrix.length() != preferred)
+		if (matrix && matrix.length != preferred)
 			matrix.resize(preferred);
 	}
 	ctx.fillStyle = getBackgroundStyle();
@@ -353,7 +389,7 @@ const MAX_AUDIO_ARRAY_SIZE = 128;
 const MAX_CHANNEL_SIZE = MAX_AUDIO_ARRAY_SIZE/2;
 
 const wallpaperAudioListener = audioArray => {
-	const len = matrix.realLength();
+	const len = matrix.dropCount;
 	const negativeDirection = config.audioReactFreeze ? 0 : -1;
 	for (var i=0; i<len; i++) {
 		const drop = matrix.get(i);
@@ -436,6 +472,69 @@ window.wallpaperPropertyListener = {
 	}
 };
 
+const _requestAnimationFrame =  window.requestAnimationFrame
+	|| window.mozRequestAnimationFrame
+	|| window.webkitRequestAnimationFrame
+	|| window.msRequestAnimationFrame;
+const _cancelAnimationFrame = window.cancelAnimationFrame || window.mozCancelAnimationFrame;
+
+let animationFrameRequestId;
+
+const requestAnimationFrame = callback => animationFrameRequestId = _requestAnimationFrame(callback);
+const cancelAnimationFrame = () => {
+	if (animationFrameRequestId) {
+		_cancelAnimationFrame(animationFrameRequestId)
+		animationFrameRequestId = undefined;
+	}
+};
+
+let previousExecution;
+
+const synchronizedRender = function(
+	renderCallback,
+	cancelPredicate = Predicates.NEVER,
+	cancelCallback = _ => {},
+	durationAccessor = () => config.animationFrameDuration
+) {
+	const synchronizedRenderCallback = timestamp => {
+		if (cancelPredicate()) {
+			cancelAnimationFrame();
+			cancelCallback(timestamp);
+			return;
+		}
+		if (timestamp - previousExecution < durationAccessor()) {
+			requestAnimationFrame(synchronizedRenderCallback);
+			return;
+		}
+		renderCallback(timestamp);
+		previousExecution = timestamp;
+		requestAnimationFrame(synchronizedRenderCallback);
+	};
+	return synchronizedRenderCallback;
+};
+
+const drawUniformPass = synchronizedRender(
+	_ => {
+		updateCanvas(false);
+		for (const drop of matrix.droplets()){
+			drop.render();
+			drop.stepDown();
+		}
+	},
+	() => matrix.allMatch(droplet => droplet.actualY >= canvas.height),
+	_ => requestAnimationFrame(drawRain)
+);
+
+const drawRain = synchronizedRender(_ => {
+		updateCanvas(false);
+		for (const drop of matrix.droplets()){
+			drop.render();
+			drop.step();
+		}
+	});
+
+// Driver
+
 const init = () => {
 	"use strict";
 	canvas = document.getElementById('canvas_matrix');
@@ -444,20 +543,9 @@ const init = () => {
 	setupSpinners();
 	setupWallpaperEngineMediaIntegration();
 	matrix = new Matrix();
-	audioBuckets = matrix.length() / MAX_AUDIO_ARRAY_SIZE;
+	audioBuckets = matrix.length / MAX_AUDIO_ARRAY_SIZE;
+	previousExecution = document.timeline.currentTime;
 	
-	let previousExecution = document.timeline.currentTime;
-	const doDraw = timestamp => {
-		if (timestamp - previousExecution < config.animationFrameDuration) {
-			requestAnimationFrame(doDraw);
-			return;
-		}
-		updateCanvas(false);
-		matrix.draw();
-		previousExecution = timestamp;
-		requestAnimationFrame(doDraw);
-	};
-	doDraw();
-	
+	requestAnimationFrame(drawUniformPass);
 	hookWallpaperEngine();
 };
