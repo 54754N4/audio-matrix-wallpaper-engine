@@ -1,14 +1,3 @@
-let matrix = null;
-let canvas = null;
-let ctx = null;
-
-let audioBuckets = null;
-
-let albumCoverArt = null;
-let trackTitle = null;
-let artist = null;
-let _rainResetChance;
-
 const Predicates = Object.freeze({
 	NEVER: () => false,
 	ALWAYS: () => true,
@@ -94,6 +83,8 @@ class Droplet {
 	stepDown = (offset=this.offset) => this.step(1, offset);
 
 	render() {
+		const canvas = globals.canvas;
+		const ctx = globals.ctx;
 		const actualX = this.actualX;
 		const actualY = this.actualY;
 		const overAlbum = collisionDectection.rect2rect(
@@ -125,7 +116,7 @@ class Droplet {
 
 class Matrix {
 	constructor() {
-		this.drops = range(canvas.width / config.fontSize)
+		this.drops = range(globals.canvas.width / config.fontSize)
 			.flatMap(x => range(variableDropCount()).map(() => new Droplet(x)));
 	}
 
@@ -133,23 +124,20 @@ class Matrix {
 		return this.drops.length;
 	}
 
-	get length() {
-		return this.drops.map(drop => drop.x)
+	length = () => this.drops.map(drop => drop.x)
 			.reduce((acc, curr) => Math.max(acc, curr), 0);
-	}
 
 	get = i => this.drops[i];
 
 	resize(preferred) {
-		const current = this.length;
+		const current = this.length();
 		if (preferred === current)
 			return;
-		const target = preferred > current ? this.expand : this.shrink;
-		target(preferred);
+		(preferred > current ? this.expand : this.shrink).bind(this)(preferred);
 	}
 
 	expand(newSize) {
-		const len = this.length;
+		const len = this.length();
 		range(newSize - len)
 			.map(i => i + len)
 			.flatMap(x => range(variableDropCount()).map(() => new Droplet(x)))
@@ -177,24 +165,24 @@ class Matrix {
 	}
 }
 
-const getPreferredDropCount = () => Math.round(canvas.width / config.fontSize);
+const getPreferredDropCount = () => Math.round(globals.canvas.width / config.fontSize);
 
 const variableFontSize = () => randOffset(config.fontSize, config.fontSizeVariability);
 
 const variableDropCount = () => Math.round(randOffset(4, 1));
 
 const clearExcept = (x, y, w, h, fill=true) => {
-	const target = fill ? ctx.fillRect : ctx.clearRect;
-	target.apply(ctx, [0, 0, canvas.width, y]);		// top
-	target.apply(ctx, [0, y + h, canvas.width, canvas.height]);	// bottom
-	target.apply(ctx, [0, 0, x, canvas.height]);	// left
-	target.apply(ctx, [x + w, 0, canvas.width, canvas.height]);	// right
+	const target = fill ? globals.ctx.fillRect : globals.ctx.clearRect;
+	target.apply(globals.ctx, [0, 0, globals.canvas.width, y]);		// top
+	target.apply(globals.ctx, [0, y + h, globals.canvas.width, globals.canvas.height]);	// bottom
+	target.apply(globals.ctx, [0, 0, x, globals.canvas.height]);	// left
+	target.apply(globals.ctx, [x + w, 0, globals.canvas.width, globals.canvas.height]);	// right
 };
 
 const clearExceptAlbum = (fill=true) => {
 	if (albumCoverArt === null) {	// didn't receive from WE yet
-		const target = fill ? ctx.fillRect : ctx.clearRect;
-		target.apply(ctx, [0, 0, canvas.width, canvas.height]);
+		const target = fill ? globals.ctx.fillRect : globals.ctx.clearRect;
+		target.apply(ctx, [0, 0, globals.canvas.width, globals.canvas.height]);
 		return;
 	}
 	clearExcept(config.albumBoundingBox.x, config.albumBoundingBox.y, config.albumBoundingBox.width, config.albumBoundingBox.height, fill);
@@ -202,42 +190,40 @@ const clearExceptAlbum = (fill=true) => {
 
 const updateCanvas = (resize, fill=true) => {
 	if (resize) {
-		canvas.height = window.innerHeight;
-		canvas.width = window.innerWidth;
+		globals.canvas.height = window.innerHeight;
+		globals.canvas.width = window.innerWidth;
 		const preferred = getPreferredDropCount();
-		if (matrix && matrix.length != preferred)
-			matrix.resize(preferred);
+		if (globals.matrix && globals.matrix.length() != preferred)
+			globals.matrix.resize(preferred);
 	}
-	ctx.fillStyle = getBackgroundStyle();
-	(fill ? ctx.fillRect : ctx.clearRect).apply(ctx, [0, 0, canvas.width, canvas.height]);
-	ctx.fillStyle = getForegroundStyle();
-	ctx.font = config.fontSize + "px arial";
+	globals.ctx.fillStyle = getBackgroundStyle();
+	(fill ? globals.ctx.fillRect : globals.ctx.clearRect).apply(globals.ctx, [0, 0, globals.canvas.width, globals.canvas.height]);
+	globals.ctx.fillStyle = getForegroundStyle();
+	globals.ctx.font = `${config.fontSize}px ${config.fontFamily}`;
 };
 
 const removeRainGlareHack = () => {
-	ctx.fillStyle = getBackgroundStyle();
-	ctx.fillRect(0, 0, canvas.width, canvas.height);
-	ctx.fillStyle = getForegroundStyle();
-	ctx.fillRect(0, 0, canvas.width, canvas.height);
+	globals.ctx.fillStyle = getBackgroundStyle();
+	globals.ctx.fillRect(0, 0, globals.canvas.width, globals.canvas.height);
+	globals.ctx.fillStyle = getForegroundStyle();
+	globals.ctx.fillRect(0, 0, globals.canvas.width, globals.canvas.height);
 };
 
 const setupSpinners = () => {
-	document.getElementById("color_spinner_red").onmousemove = function(e) {
+	document.getElementById("color_spinner_red").onmousemove = e => 
 		decideColor(e.clientX, document.getElementById("color_spinner_red").offsetWidth, "red");
-	};
-	document.getElementById("color_spinner_green").onmousemove = function(e) {
+	document.getElementById("color_spinner_green").onmousemove = e => 
 		decideColor(e.clientY, document.getElementById("color_spinner_green").offsetHeight, "green");
-	};
-	document.getElementById("color_spinner_blue").onmousemove = function(e) {
+	document.getElementById("color_spinner_blue").onmousemove = e => {
 		var max = document.getElementById("color_spinner_blue").offsetWidth;
 		decideColor(max - e.clientX, max, "blue");
 	};
 };
 
 const setupWallpaperEngineMediaIntegration = () => {
-	albumCoverArt = document.getElementById('album_cover_art');
-	trackTitle = document.getElementById('track_title');
-	artist = document.getElementById('artist');
+	config.albumCoverArt = document.getElementById('album_cover_art');
+	config.trackTitle = document.getElementById('track_title');
+	config.artist = document.getElementById('artist');
 };
 
 const decideColor = (val, max, c) => {
@@ -315,7 +301,7 @@ const paramMapping = {
 		parse: parseFloat,
 		update: chance => {
 			config.rainResetChance = chance;
-			_rainResetChance = chance;
+			config.currentRainResetChance = chance;
 		},
 	},
 	audioreactthreshold: {
@@ -352,6 +338,7 @@ const paramMapping = {
 
 const config = {
 	alphabet: paramMapping.alphabet.default,
+	fontFamily: "Courier New",
 	fontSize: paramMapping.fontsize.default,
 	fontSizeVariability: paramMapping.fontsizevariability.default,
 	animationFrameDuration: paramMapping.animationframeduration.default,
@@ -363,6 +350,7 @@ const config = {
 	backgroundTransparency: 0.15, // 0.04
 	colorSpinners: paramMapping.colorspinners.default,
 	rainResetChance: paramMapping.rainresetchance.default,
+	currentRainResetChance: this.rainResetChance,
 	audioPlaybackState: 2,
 	audioFadeInRain: paramMapping.audiofadeinrain.default,	// overrides rain reset chance
 	audioFadeInDuration: paramMapping.audiofadeinduration.default,
@@ -370,6 +358,18 @@ const config = {
 	audioReactFreeze: paramMapping.audioreactfreeze.default,
 	audioChangeColour: paramMapping.audiochangecolour.default,	// overrides colorSpinners
 	albumBoundingBox: { x:0, y:0, width:0, height:0 },
+	audioBuckets: null,
+	albumCoverArt: null,
+	trackTitle: null,
+	artist: null,
+};
+
+const globals = {
+	matrix: null,
+	canvas: null,
+	ctx: null,
+	animationFrameRequestId: undefined,
+	previousExecution: document.timeline.currentTime,
 };
 
 const changeColors = (fgColour, bgColour) => {
@@ -385,17 +385,14 @@ const getInvertedForegroundStyle = () => getColorStyle(config.invertedForeground
 const getBackgroundStyle = () => getColorStyle(config.backgroundColour, config.backgroundTransparency);
 const getInvertedBackgroundStyle = () => getColorStyle(config.invertedBackgroundColour, config.backgroundTransparency);
 
-const MAX_AUDIO_ARRAY_SIZE = 128;
-const MAX_CHANNEL_SIZE = MAX_AUDIO_ARRAY_SIZE/2;
+/* Wallpaper engine */
 
 const wallpaperAudioListener = audioArray => {
-	const len = matrix.dropCount;
 	const negativeDirection = config.audioReactFreeze ? 0 : -1;
-	for (var i=0; i<len; i++) {
-		const drop = matrix.get(i);
-		const bucket = Math.floor(drop.x/audioBuckets);
+	globals.matrix.forEach(drop => {
+		const bucket = Math.floor(drop.x / config.audioBuckets);
 		drop.dx = audioArray[bucket] > config.audioReactThreshold ? negativeDirection : 1;
-	}
+	});
 };
 
 // Media event properties docs: https://docs.wallpaperengine.io/en/web/audio/media.html#available-media-integration-listeners
@@ -406,23 +403,23 @@ const wallpaperMediaStatusListener = event => {
 
 const wallpaperMediaPropertiesListener = event => {
 	console.log("props", event); // todo remove
-	trackTitle.textContent = event.title;
-	artist.textContent = event.artist;
+	config.trackTitle.textContent = event.title;
+	config.artist.textContent = event.artist;
 };
 
 const wallpaperMediaThumbnailListener = event => {
 	console.log("thumbnail", event);	// todo remove
-	albumCoverArt.src = event.thumbnail;
-	config.albumBoundingBox = albumCoverArt.getBoundingClientRect();
-	if (config.albumBoundingBox.width === 0) {
-		const imageSquareSideSize = 300;
-		config.albumBoundingBox.x -= imageSquareSideSize/2;
-		config.albumBoundingBox.y -= imageSquareSideSize/2;
-		config.albumBoundingBox.width = config.albumBoundingBox.height = imageSquareSideSize;
-	}
+	config.albumCoverArt.src = event.thumbnail;
+	config.albumBoundingBox = config.albumCoverArt.getBoundingClientRect();
+	// if (config.albumBoundingBox.width === 0) {
+	// 	const imageSquareSideSize = 300;
+	// 	config.albumBoundingBox.x -= imageSquareSideSize / 2;
+	// 	config.albumBoundingBox.y -= imageSquareSideSize / 2;
+	// 	config.albumBoundingBox.width = config.albumBoundingBox.height = imageSquareSideSize;
+	// }
 	document.body.style['background-color'] = event.primaryColor;
-	trackTitle.style.color = event.textColor;
-	artist.style.color = event.textColor;
+	config.trackTitle.style.color = event.textColor;
+	config.artist.style.color = event.textColor;
 	if (config.audioChangeColour)
 		changeColors(parseHexColor(event.textColor), parseHexColor(event.primaryColor));
 };
@@ -431,7 +428,7 @@ const wallpaperMediaPlaybackListener = event => {
 	console.log("playback", event);	// todo remove
 	config.audioPlaybackState = event.state;
 	if (event.state !== window.wallpaperMediaIntegration.PLAYBACK_PLAYING)
-		config.rainResetChance = _rainResetChance;
+		config.rainResetChance = config.currentRainResetChance;
 };
 
 const wallpaperMediaTimelineListener = event => {
@@ -443,7 +440,7 @@ const wallpaperMediaTimelineListener = event => {
 	if (isStart || event.position > event.duration - config.audioFadeInDuration)
 		config.rainResetChance = parametricGaussian(percentage, 1, isStart ? 0 : 1);
 	else
-		config.rainResetChance = _rainResetChance;
+		config.rainResetChance = config.currentRainResetChance;
 };
 
 const hookWallpaperEngine = () => [
@@ -472,23 +469,19 @@ window.wallpaperPropertyListener = {
 	}
 };
 
-const _requestAnimationFrame =  window.requestAnimationFrame
-	|| window.mozRequestAnimationFrame
-	|| window.webkitRequestAnimationFrame
-	|| window.msRequestAnimationFrame;
+/* Animation */
+
+const _requestAnimationFrame =  window.requestAnimationFrame || window.mozRequestAnimationFrame
+	|| window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
 const _cancelAnimationFrame = window.cancelAnimationFrame || window.mozCancelAnimationFrame;
 
-let animationFrameRequestId;
-
-const requestAnimationFrame = callback => animationFrameRequestId = _requestAnimationFrame(callback);
+const requestAnimationFrame = callback => globals.animationFrameRequestId = _requestAnimationFrame(callback);
 const cancelAnimationFrame = () => {
-	if (animationFrameRequestId) {
-		_cancelAnimationFrame(animationFrameRequestId)
-		animationFrameRequestId = undefined;
+	if (globals.animationFrameRequestId) {
+		_cancelAnimationFrame(globals.animationFrameRequestId)
+		globals.animationFrameRequestId = undefined;
 	}
 };
-
-let previousExecution;
 
 const synchronizedRender = function(
 	renderCallback,
@@ -502,12 +495,12 @@ const synchronizedRender = function(
 			cancelCallback(timestamp);
 			return;
 		}
-		if (timestamp - previousExecution < durationAccessor()) {
+		if (timestamp - globals.previousExecution < durationAccessor()) {
 			requestAnimationFrame(synchronizedRenderCallback);
 			return;
 		}
 		renderCallback(timestamp);
-		previousExecution = timestamp;
+		globals.previousExecution = timestamp;
 		requestAnimationFrame(synchronizedRenderCallback);
 	};
 	return synchronizedRenderCallback;
@@ -516,36 +509,38 @@ const synchronizedRender = function(
 const drawUniformPass = synchronizedRender(
 	_ => {
 		updateCanvas(false);
-		for (const drop of matrix.droplets()){
+		for (const drop of globals.matrix.droplets()){
 			drop.render();
 			drop.stepDown();
 		}
 	},
-	() => matrix.allMatch(droplet => droplet.actualY >= canvas.height),
+	() => globals.matrix.allMatch(droplet => droplet.actualY >= globals.canvas.height),
 	_ => requestAnimationFrame(drawRain)
 );
 
 const drawRain = synchronizedRender(_ => {
-		updateCanvas(false);
-		for (const drop of matrix.droplets()){
-			drop.render();
-			drop.step();
-		}
-	});
+	updateCanvas(false);
+	for (const drop of globals.matrix.droplets()){
+		drop.render();
+		drop.step();
+	}
+});
 
-// Driver
+/* Driver */
+
+const MAX_AUDIO_ARRAY_SIZE = 128;
+const MAX_CHANNEL_SIZE = MAX_AUDIO_ARRAY_SIZE/2;
 
 const init = () => {
 	"use strict";
-	canvas = document.getElementById('canvas_matrix');
-	ctx = canvas.getContext("2d", { alpha: false });
+	globals.canvas = document.getElementById('canvas_matrix');
+	globals.ctx = globals.canvas.getContext("2d", { alpha: false });
 	updateCanvas(true);
 	setupSpinners();
 	setupWallpaperEngineMediaIntegration();
-	matrix = new Matrix();
-	audioBuckets = matrix.length / MAX_AUDIO_ARRAY_SIZE;
-	previousExecution = document.timeline.currentTime;
-	
+	globals.matrix = new Matrix();
+	config.audioBuckets = globals.matrix.length() / MAX_AUDIO_ARRAY_SIZE;
+
 	requestAnimationFrame(drawUniformPass);
 	hookWallpaperEngine();
 };
