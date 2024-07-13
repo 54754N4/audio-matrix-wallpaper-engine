@@ -99,7 +99,7 @@ const pixel = function*(imageData) {
 const getColorIndicesForCoord = (x, y, width) => {
     const red = y * (width * 4) + x * 4;
     return [red, red + 1, red + 2, red + 3];
-  };
+};
 
 const CARDINALS = Object.freeze({
     NOP: [0, 0],
@@ -115,8 +115,8 @@ const CARDINALS = Object.freeze({
 
 const pixelNeighbours = function*(index, imageData) {
     const width = imageData.width;
-    const x = index%width;
-    const y = Math.floor(index/width);
+    const x = (index/4)%width;
+    const y = Math.floor((index/4)/width);
     const neighbours = Object.values(CARDINALS)
         .map(coords => [x + coords[0], y + coords[1], width])
         .map(args => getColorIndicesForCoord(...args))

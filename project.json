@@ -1,11 +1,23 @@
 {
 	"contentrating" : "Everyone",
-	"description" : "RGB sliders can be manipulated by hovering with the mouse as such (or just disable and control from wallpaper engine 🤷):\n- Red: Top of the screen (left: 0, right: 255)\n- Green: Right of the screen (top: 0, bottom: 255)\n- Blue: Bottom of the screen (right: 0, left: 255)\n\nAudio reaction can be disabled or you can choose between the default:\n- rain drops flowing backwards (if their respective frequencies have sound above a threshold)\n- or alternatively rain drops freeze on audio\n\nRain can change color based on the playing media.",
+	"description" : "RGB sliders can be manipulated by hovering with the mouse as such (or just disable and control from wallpaper engine 🤷):\n- Red: Top of the screen (left: 0, right: 255)\n- Green: Right of the screen (top: 0, bottom: 255)\n- Blue: Bottom of the screen (right: 0, left: 255)\n\nAudio reaction can be disabled or you can choose between the default:\n- rain drops flowing backwards (if their respective frequencies have sound above a threshold)\n- or alternatively rain drops freeze on audio\n\nRain can change color based on the playing media and the albums are drawn using unicode",
 	"file" : "index.html",
 	"general" : 
 	{
 		"properties" : 
 		{
+			"albumfontsize" : 
+			{
+				"condition" : "audiochangecolour.value",
+				"fraction" : false,
+				"index" : 10,
+				"max" : 100,
+				"min" : 1,
+				"order" : 110,
+				"text" : "albumfontsize",
+				"type" : "slider",
+				"value" : 10
+			},
 			"alphabet" : 
 			{
 				"index" : 0,
@@ -17,52 +29,58 @@
 			"animationframeduration" : 
 			{
 				"fraction" : false,
-				"index" : 8,
+				"index" : 7,
 				"max" : 1000,
 				"min" : 0,
-				"order" : 108,
+				"order" : 107,
 				"text" : "animationframeduration",
 				"type" : "slider",
 				"value" : 30
 			},
 			"audioalbumxpercent" : 
 			{
-				"fraction" : false,
-				"index" : 13,
-				"max" : 100,
+				"condition" : "audiochangecolour.value",
+				"fraction" : true,
+				"index" : 14,
+				"max" : 1,
 				"min" : 0,
-				"order" : 113,
+				"order" : 114,
+				"precision" : 3,
+				"step" : 0.01,
 				"text" : "audioalbumxpercent",
 				"type" : "slider",
-				"value" : 50
+				"value" : 0.5
 			},
 			"audioalbumypercent" : 
 			{
-				"fraction" : false,
-				"index" : 14,
-				"max" : 100,
+				"condition" : "audiochangecolour.value",
+				"fraction" : true,
+				"index" : 15,
+				"max" : 1,
 				"min" : 0,
-				"order" : 114,
+				"order" : 115,
+				"precision" : 3,
+				"step" : 0.01,
 				"text" : "audioalbumypercent",
 				"type" : "slider",
-				"value" : 50
+				"value" : 0.5
 			},
 			"audiochangecolour" : 
 			{
-				"index" : 9,
-				"order" : 109,
+				"index" : 8,
+				"order" : 108,
 				"text" : "audiochangecolour",
 				"type" : "bool",
 				"value" : true
 			},
 			"audiofadeinduration" : 
 			{
-				"condition" : "audiofadeinrain.value",
+				"condition" : "audiochangecoulour.value && audiofadeinrain.value",
 				"fraction" : true,
-				"index" : 11,
+				"index" : 12,
 				"max" : 30,
 				"min" : 0,
-				"order" : 111,
+				"order" : 112,
 				"precision" : 2,
 				"step" : 0.1,
 				"text" : "audiofadeinduration",
@@ -71,27 +89,30 @@
 			},
 			"audiofadeinrain" : 
 			{
-				"index" : 10,
-				"order" : 110,
+				"condition" : "audiochangecolour.value",
+				"index" : 11,
+				"order" : 111,
 				"text" : "audiofadeinrain",
 				"type" : "bool",
 				"value" : true
 			},
 			"audioreactfreeze" : 
 			{
-				"index" : 12,
-				"order" : 112,
+				"condition" : "audiochangecolour.value",
+				"index" : 13,
+				"order" : 113,
 				"text" : "audioreactfreeze",
 				"type" : "bool",
 				"value" : false
 			},
 			"audioreactthreshold" : 
 			{
+				"condition" : "audiochangecolour.value",
 				"fraction" : true,
-				"index" : 7,
+				"index" : 9,
 				"max" : 1,
 				"min" : 0,
-				"order" : 107,
+				"order" : 109,
 				"precision" : 4,
 				"step" : 0.001,
 				"text" : "audioreactthreshold",
@@ -170,12 +191,12 @@
 	"preview" : "preview.gif",
 	"ratingsex" : "none",
 	"ratingviolence" : "none",
-	"snapshotformat" : 0,
+	"snapshotformat" : 5,
 	"snapshotoverlay" : "",
 	"tags" : [ "Abstract" ],
 	"title" : "Responsive Matrix",
 	"type" : "web",
-	"version" : 12,
+	"version" : 17,
 	"visibility" : "public",
 	"workshopid" : "1605157424",
 	"workshopurl" : "steam://url/CommunityFilePage/1605157424"
