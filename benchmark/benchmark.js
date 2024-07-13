@@ -172,6 +172,7 @@ const naiveDensityCalculation = imageData => {
     return count;
 };
 
+// TODO probably should have to look into kernels cause this is too shity huh
 const sumNeighboursDensityCalculation = (imageData) => {
     let fitness = 0;
     const threshold = 15;
@@ -194,60 +195,51 @@ const calculateDensityChar = (...char) => {
     // return sumNeighboursDensityCalculation(extracted);
 };
 
-const BUFFER_LIMIT = 256;
 
-const buffer = {
-	memory: [],
-    nextChar: char => {
-        const density = calculateDensityChar(char);
-        const element = {char, density};
-        if (buffer.memory.length == 0) {
-            buffer.memory.push(element);
-            return 0;
-        }
-        let index = -1;
-        for (let i=0; i < buffer.memory.length; i++) {
-            if (buffer.memory[i].density <= density) {
-                index = i;
-                break;
+(function benchamrk() {
+    const BUFFER_LIMIT = 256;
+    const buffer = {
+        memory: [],
+        sort: () => buffer.memory = buffer.memory.sort(buffer.comparator),
+        comparator: (a,b) => b.density - a.density
+    };
+   
+    const MAX = 149813;
+
+    (function printPercentage(seconds=1) {
+        const startTime = Date.now();
+        const printPercentageCallback = () => {
+            const currentLength = buffer.memory.length;
+            const percentage = (currentLength / MAX) * 100;
+            const currentTime = Date.now();
+            const elapsedTime = currentTime - startTime; // in ms
+            console.log(`${percentage.toFixed(2)}% (${(elapsedTime / 1000).toFixed(2)}s)`);
+            if (percentage >= 100) {
+                clearInterval(timer);
             }
         }
-        // console.log("Char", char, "Density", density, "Pushed at", index !== -1 && buffer.memory.length < BUFFER_LIMIT ? "last" : index, " position");
-        if (index !== -1 && buffer.memory.length < BUFFER_LIMIT)
-            buffer.memory.push(element);
-        else if (index !== -1)
-            buffer.memory[index] = element;
-        return index;
-    },
-	sort: () => buffer.memory = memory.sort(buffer.comparator),
-	comparator: (a,b) => b.density - a.density
-};
+        const timer = setInterval(printPercentageCallback, seconds * 1000);
+    })();
 
+    const unicodeGenerator = unicodeCodepointRange();
+    const delay = 1;
+    const onDone = () => console.log(JSON.stringify(buffer.memory));
+    let i=0, char, timeoutId;
 
-const unicodeGenerator = unicodeCodepointRange();
-const delay = 2;
-const hashmap = {};
-const MAX = 149813;
-let i=0, char, timeoutId;
-
-(function loop() {
-    timeoutId = setTimeout(() => {
-        char = unicodeGenerator.next().value;
-        // buffer.nextChar(char);
-        hashmap[i] = {
-            codepoints: char,
-            char: String.fromCharCode(...char),
-            density: calculateDensityChar(char)
-        };
-        if (i++ < MAX)
-            loop();
-        else
-            clearTimeout(timeoutId);
-    }, delay);
+    (function loop(onDoneCallback=onDone) {
+        timeoutId = setTimeout(() => {
+            char = unicodeGenerator.next().value;
+            const density = calculateDensityChar(char);
+            buffer.memory.push({char, density});
+            if (i++ < MAX)
+                loop();
+            else {
+                clearTimeout(timeoutId);
+                onDoneCallback();
+            }
+        }, delay);
+    })();
 })();
-
-// console.log(...buffer.memory);
-console.log(JSON.stringify(hashmap));
 
 // let i = 0;
 // for (const codePoint of unicodeCodepointRange()) {
@@ -261,7 +253,7 @@ console.log(JSON.stringify(hashmap));
 // buffer.nextChar(0x0058, false);    // Y
 // iterateUnicode({ start: 0, end: 0xD7FF }, buffer.nextChar);
 // iterateUnicode({ start: 0xE000, end: 0xFFFF }, buffer.nextChar);
-console.log("Memory buffer", buffer.memory);
+
 
 // const char = "M";
 // debugChar(char);

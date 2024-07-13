@@ -1,5 +1,6 @@
 - image2ascii
-    benchmark unicodes => char gradient
+    - benchmark unicodes => char gradient [almost done]
+        - puppeteer/selenium whatever but just dont do it manually, damn. Run over every unicode block for asciiGradient.js valid ranges
 
 - place album image anywhere based on user defined x,y coords and set css pos to absolute
 - make 2 canvases 1 for background 1 for rain (that way images can be drawn separately and not constantly, slowing down rain code)

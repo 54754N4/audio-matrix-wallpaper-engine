@@ -514,7 +514,7 @@ const drawUniformPass = synchronizedRender(
 			drop.stepDown();
 		}
 	},
-	() => globals.matrix.allMatch(droplet => droplet.actualY >= globals.canvas.height),
+	() => globals.matrix.allMatch(droplet => droplet.actualY >= globals.canvas.height + config.fontSize),
 	_ => requestAnimationFrame(drawRain)
 );
 
