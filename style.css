@@ -67,13 +67,13 @@ html, body {
 
 .box {
 	z-index: 1;
-	width: 50vw;
-	height: 30vh;
+	width: 100vw;
+	height: 100vh;
 	display: flex;
-	flex-direction: column;
-	justify-content: center;
-	align-items: center;
-	mix-blend-mode: overlay;	/* change to 'difference' when u have image2ascii */
+	flex-wrap: wrap;
+	align-content: flex-start;
+	justify-content: flex-end;
+	mix-blend-mode: difference;
 }
 
 .textBox {
