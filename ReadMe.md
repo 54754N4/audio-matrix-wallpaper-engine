@@ -8,4 +8,4 @@ Audio/Media integration thanks to `Wallpaper Engine`
 
 #### Song Transition Preview
 
-[Image](song-transition.mp4)
+[Image](song-transition.gif)
