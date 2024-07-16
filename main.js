@@ -472,7 +472,7 @@ const config = {
 	backgroundColour: paramMapping.bgcolour.default,
 	invertedBackgroundColour: colorInverted(paramMapping.bgcolour.default),
 	foregroundTransparency: 0.9,
-	backgroundTransparency: 0.15, // 0.04
+	backgroundTransparency: 0.06, // 0.15, // 0.04
 	colorSpinners: paramMapping.colorspinners.default,
 	rainResetChance: paramMapping.rainresetchance.default,
 	currentRainResetChance: this.rainResetChance,
