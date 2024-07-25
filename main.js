@@ -16,7 +16,7 @@ const scale = (num, in_min, in_max, out_min, out_max) => (num - in_min) * (out_m
 
 const parseBool = value => typeof(value) === 'boolean' ? value : value === 'true';
 
-const parseColor = colorStr => {
+const parseColour = colorStr => {
 	var color = colorStr.split(' ').map(c => Math.ceil(c * 255));
 	if (color.length == 3)
 		return color;
@@ -24,7 +24,7 @@ const parseColor = colorStr => {
 	return colorStr;
 };
 
-const parseHexColor = hex => {
+const parseHexColour = hex => {
 	hex = hex.replace('#', '');
 	return {
 		R: parseInt(hex.substring(0, 2), 16),
@@ -33,7 +33,20 @@ const parseHexColor = hex => {
 	};
 };
 
-const colorInverted = ({R, G, B}) => ({R: 255-R, G: 255-G, B: 255-B});
+const numTo2DigitHex = num => num.toString(16).padStart(2, '0');
+
+const colourToString = ({R, G, B}) => `#${numTo2DigitHex(R)}${numTo2DigitHex(G)}${numTo2DigitHex(B)}`;
+
+const colourInverted = ({R, G, B}) => ({R: 255-R, G: 255-G, B: 255-B});
+
+const colorDistance = (c1, c2, alpha=false) => Math.sqrt([
+		c2.R - c1.R,
+		c2.G - c1.G,
+		c2.B - c1.B,
+		alpha ? c2.A - c1.A : 0
+	].filter(e => e)
+	.map(e => e**2)
+	.reduce((acc, curr) => acc + curr, 0));
 
 const collisionDectection = Object.freeze({
 	rect2rect: (x1, y1, w1, h1, x2, y2, w2, h2) => x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2,
@@ -52,14 +65,45 @@ const parametricGaussian = (x, a=1, b=0, c=Math.sqrt(1/2)) => {
 
 const gaussian = x => parametricGaussian(x);	// reduces to f: x -> exp(-x^2)
 
-const colorDistance = (c1, c2, alpha=false) => Math.sqrt([
-		c2.R - c1.R,
-		c2.G - c1.G,
-		c2.B - c1.B,
-		alpha ? c2.A-c1.A : 0
-	].filter(e => e)
-	.map(e => e**2)
-	.reduce((acc, curr) => acc + curr, 0))
+
+/**
+ * Creates a parabola that guarantees that the roots are:
+ * - 0 (e.g. the start of the song)
+ * - length (e.g. the full duration of the song)
+ * Creates parametrized polynomials of the form x -> -x(x-length) = -x^2 + l.x
+ * that can then be normalized by dividing by the vertex height.
+ */
+const createParabolicFade = l => new Polynomial2(-1, l);
+
+class Polynomial2 {
+	constructor(a=0, b=0, c=0, gaveRoots=false) {
+		if (gaveRoots) {
+			this.a = a;
+			this.b = - a * (b + c);
+			this.c = a * b * c;
+			this.r1 = b;
+			this.r2 = c;
+		} else {
+			this.a = a;
+			this.b = b;
+			this.c = c;
+			this.r1 = (-b - Math.sqrt(b**2 - 4*a*c))/(2*a);
+			this.r2 = (-b + Math.sqrt(b**2 - 4*a*c))/(2*a);
+		}
+	}
+
+	get vertex() {
+		return {
+			x: -this.b / (2 * this.a),
+			y: this.c - this.b**2 / (4 * this.a)
+		};
+	}
+
+	hasCoefficients = (a, b, c) => this.a === a && this.b === b && this.c === c;
+    hasRoots = (r1, r2) => (this.r1 === r1 && this.r2 === r2) || (this.r1 === r2 && this.r2 === r1);
+	apply = x => this.a * x**2 + this.b * x + this.c;
+	applyNormalized = x => this.apply(x) / this.vertex.y;
+}
 
 class Droplet {
 	constructor(x) {
@@ -77,10 +121,15 @@ class Droplet {
 	get actualY() {
 		return Math.floor(this.y * this.fontSize);
 	}
-	
+
 	step = (dx=this.dx, offset=this.offset) => this.y += dx * offset;
 	stepUp = (offset=this.offset) => this.step(-1, offset);
 	stepDown = (offset=this.offset) => this.step(1, offset);
+
+	stepIf(predicate, dx=this.dx, offset=this.offset) {
+		if (predicate) 
+			this.step(dx, offset);
+	}
 
 	render() {
 		const canvas = globals.canvas;
@@ -105,11 +154,13 @@ class Droplet {
 		}
 		if (this.dx > 0 && actualY >= canvas.height && Math.random() > config.rainResetChance) {
 			this.y = 0;
-			this.fontSize = variableFontSize();
+			if (config.variableFontSize)
+				this.fontSize = variableFontSize();
 		}
 		if (this.dx < 0 && actualY <= config.fontSize) {
 			this.y = canvas.height;
-			this.fontSize = variableFontSize();
+			if (config.variableFontSize)
+				this.fontSize = variableFontSize();
 		}
 	}
 }
@@ -201,7 +252,7 @@ const updateCanvas = (resize, fill=true) => {
 	globals.ctx.fillStyle = getForegroundStyle();
 	globals.ctx.font = `${config.fontSize}px ${config.fontFamily}`;
 	if (config.albumCoverArtAsciiCanvas !== null)
-		globals.ctx.drawImage(config.albumCoverArtAsciiCanvas, config.albumBoundingBox.x, config.albumBoundingBox.y);
+		globals.ctx.drawImage(config.albumCoverArtAsciiCanvas.canvas, config.albumBoundingBox.x, config.albumBoundingBox.y);
 };
 
 const removeRainGlareHack = () => {
@@ -222,21 +273,37 @@ const setupSpinners = () => {
 	};
 };
 
+const calcMaxExpansion = (imgWidth, imgHeight, maxWidth, maxHeight) => {
+	const wScale = maxWidth/imgWidth, 
+		hScale = maxHeight/imgHeight,
+		scale = Math.min(wScale, hScale);
+	return {
+		width: imgWidth * scale,
+		height: imgHeight * scale,
+		scale
+	};
+};
+
 const updateAlbumDrawingBox = () => {
 	if (config.albumCoverArt === null || !config.albumCoverArt.width || !config.albumCoverArt.height)
 		return;
-	const scale = 2;
-	const [ newWidth, newHeight ] = [config.albumCoverArt.width, config.albumCoverArt.height].map(e => e * scale);
+	const xPadding = window.visualViewport.width * config.audioAlbumXPercent;
+	const yPadding = window.visualViewport.height * config.audioAlbumYPercent;
+	const expandedSize = calcMaxExpansion(
+		config.albumCoverArt.width,
+		config.albumCoverArt.height,
+		window.visualViewport.width - 2 * xPadding,
+		window.visualViewport.height - 2 * yPadding
+	);
+	config.albumCoverArtAsciiCanvas = createAsciiArtCanvas(expandedSize.width, expandedSize.height, config.albumFontSize);
+	const initialX = window.visualViewport.width * 0.5 - expandedSize.width/2;
+	const initialY = window.visualViewport.height * 0.5 - expandedSize.height/2;
 	config.albumBoundingBox = {
-		x: window.visualViewport.width * config.audioAlbumXPercent - newWidth/2,
-		y: window.visualViewport.height * config.audioAlbumYPercent - newHeight/2,
-		width: newWidth,
-		height: newHeight,
+		x: Math.floor(initialX/config.albumFontSize) * config.albumFontSize,	// makes sure to fall into a multiple of albumFontSize
+		y: Math.floor(initialY/config.albumFontSize) * config.albumFontSize,
+		width: config.albumCoverArtAsciiCanvas.cols * config.albumFontSize,
+		height: config.albumCoverArtAsciiCanvas.rows * config.albumFontSize,
 	};
-	config.albumCoverArtAsciiCanvas = createAsciiArtCanvas(
-		config.albumBoundingBox.width,
-		config.albumBoundingBox.height,
-		config.albumFontSize);
 	updateCanvas(false);
 };
 
@@ -245,7 +312,7 @@ const setupWallpaperEngineMediaIntegration = () => {
 	let observer = new MutationObserver((changes) => {
 		changes.forEach(change => {
 			if (change.attributeName.includes('src'))
-				setTimeout(updateAlbumDrawingBox, 200);
+				setTimeout(updateAlbumDrawingBox, 300);
 		});
 	});
 	observer.observe(config.albumCoverArt, {attributes: true, childList: true, subtree: true});
@@ -334,7 +401,11 @@ const createAsciiArtCanvas = (maxWidth, maxHeight, fontSize) => {
             outputCtx.fillText(char, x, y);
         }
     }
-    return outputCanvas;
+    return {
+		canvas: outputCanvas,
+		rows,
+		cols
+	};
 };
 
 const paramMapping = {
@@ -348,6 +419,20 @@ const paramMapping = {
 		parse: parseInt,
 		update: fontSize => config.fontSize = fontSize,
 	},
+	variablefontsize: {
+		default: true,
+		parse: parseBool,
+		update: vary => {
+			config.variableFontSize = vary;
+			for (const drop of globals.matrix.droplets())
+				drop.fontSize = vary ? variableFontSize() : config.fontSize;
+		},
+	},
+	fontsizevariability: {
+		default: 3,
+		parse: parseInt,
+		update: variability => config.fontSizeVariability = variability,
+	},
 	albumfontsize: {
 		default: 10,
 		parse: parseInt,
@@ -356,28 +441,23 @@ const paramMapping = {
 			updateAlbumDrawingBox();
 		},
 	},
-	fontsizevariability: {
-		default: 3,
-		parse: parseInt,
-		update: variability => config.fontSizeVariability = variability,
-	},
 	fgcolour: {
 		default: {
 			R: 255,
 			G: 0,
 			B: 0,
 		},
-		parse: parseColor,
-		update: color => {
-			if (color.length != 3) {
+		parse: parseColour,
+		update: colour => {
+			if (colour.length != 3) {
 				console.log("Error we don't have 3 components");
 			} else {
-				config.foregroundColour.R = color[0];
-				config.foregroundColour.G = color[1];
-				config.foregroundColour.B = color[2];
+				config.userForegroundColour = {};
+				config.userForegroundColour.R = colour[0];
+				config.userForegroundColour.G = colour[1];
+				config.userForegroundColour.B = colour[2];
 			}
-			config.invertedForegroundColour = colorInverted(config.foregroundColour);
-			removeRainGlareHack();
+			changeColors(config.userForegroundColour, config.backgroundColour);
 		},
 	},
 	bgcolour: {
@@ -386,17 +466,17 @@ const paramMapping = {
 			G: 0,
 			B: 0
 		},
-		parse: parseColor,
-		update: color => {
-			if (color.length != 3) {
+		parse: parseColour,
+		update: colour => {
+			if (colour.length != 3) {
 				console.log("Error we don't have 3 components");
 			} else {
-				config.backgroundColour.R = color[0];
-				config.backgroundColour.G = color[1];
-				config.backgroundColour.B = color[2];
+				config.userBackgroundColour = {};
+				config.userBackgroundColour.R = colour[0];
+				config.userBackgroundColour.G = colour[1];
+				config.userBackgroundColour.B = colour[2];
 			}
-			config.invertedBackgroundColour = colorInverted(config.backgroundColour);
-			removeRainGlareHack();
+			changeColors(config.foregroundColour, config.userBackgroundColour);
 		},
 	},
 	colorspinners: {
@@ -430,7 +510,34 @@ const paramMapping = {
 	audiochangecolour: {
 		default: true,
 		parse: parseBool,
-		update: change => config.audioChangeColour = change,
+		update: change => {
+			config.audioChangeColour = change;
+			if (change) {
+				config.colorSpinners = false;
+				if (config.songTextColour && config.songPrimaryColour) {
+					const bg = config.audioChangeRainColourOnly ? config.userBackgroundColour : config.songPrimaryColour;
+					changeColors(config.songTextColour, bg);
+				}
+			} else
+				changeColors(config.userForegroundColour, config.userBackgroundColour);
+			if (change)
+				config.albumCoverArt.src = config.albumSource;
+			else {
+				config.albumCoverArt.setAttribute('src', '');
+				config.albumBoundingBox = { x:0, y:0, width:0, height:0 };
+			}
+		},
+	},
+	audiochangeraincolouronly: {
+		default: true,
+		parse: parseBool,
+		update: change => {
+			config.audioChangeRainColourOnly = change;
+			if (change)
+				config.colorSpinners = false;
+			const bg = change ? config.userBackgroundColour : config.songPrimaryColour;
+			changeColors(config.songTextColour, bg);
+		},
 	},
 	audiofadeinrain: {
 		default: true,
@@ -443,7 +550,7 @@ const paramMapping = {
 		update: duration => config.audioFadeInDuration = duration,
 	},
 	audioalbumxpercent: {
-		default: 0.5,
+		default: 0.2,
 		parse: parseFloat,
 		update: percent => {
 			config.audioAlbumXPercent = percent;
@@ -451,7 +558,7 @@ const paramMapping = {
 		},
 	},
 	audioalbumypercent: {
-		default: 0.5,
+		default: 0.2,
 		parse: parseFloat,
 		update: percent => {
 			config.audioAlbumYPercent = percent;
@@ -464,13 +571,19 @@ const config = {
 	alphabet: paramMapping.alphabet.default,
 	fontFamily: "Courier New",
 	fontSize: paramMapping.fontsize.default,
+	variableFontSize: paramMapping.variablefontsize.default,
 	albumFontSize: paramMapping.albumfontsize.default,
 	fontSizeVariability: paramMapping.fontsizevariability.default,
 	animationFrameDuration: paramMapping.animationframeduration.default,
+	userForegroundColour: paramMapping.fgcolour.default,
+	userBackgroundColour: paramMapping.bgcolour.default,
+	songPrimaryColour: null,
+	songTextColour: null,
+	songSrc: null,
 	foregroundColour: paramMapping.fgcolour.default,
-	invertedForegroundColour: colorInverted(paramMapping.fgcolour.default),
+	invertedForegroundColour: colourInverted(paramMapping.fgcolour.default),
 	backgroundColour: paramMapping.bgcolour.default,
-	invertedBackgroundColour: colorInverted(paramMapping.bgcolour.default),
+	invertedBackgroundColour: colourInverted(paramMapping.bgcolour.default),
 	foregroundTransparency: 0.9,
 	backgroundTransparency: 0.06, // 0.15, // 0.04
 	colorSpinners: paramMapping.colorspinners.default,
@@ -482,14 +595,17 @@ const config = {
 	audioReactThreshold: paramMapping.audioreactthreshold.default,
 	audioReactFreeze: paramMapping.audioreactfreeze.default,
 	audioChangeColour: paramMapping.audiochangecolour.default,	// overrides colorSpinners
+	audioChangeRainColourOnly: paramMapping.audiochangeraincolouronly.default,
 	audioAlbumXPercent: paramMapping.audioalbumxpercent.default,
 	audioAlbumYPercent: paramMapping.audioalbumypercent.default,
 	albumBoundingBox: { x:0, y:0, width:0, height:0 },
 	audioBuckets: null,
 	albumCoverArt: null,
+	albumSource: null,
 	trackTitle: null,
 	artist: null,
 	albumCoverArtAsciiCanvas: null,
+	parabolicFade: null,
 };
 
 const globals = {
@@ -501,8 +617,10 @@ const globals = {
 };
 
 const changeColors = (fgColour, bgColour) => {
-	config.invertedForegroundColour = colorInverted(config.foregroundColour = fgColour);
-	config.invertedBackgroundColour = colorInverted(config.backgroundColour = bgColour);
+	if (fgColour)
+		config.invertedForegroundColour = colourInverted(config.foregroundColour = fgColour);
+	if (bgColour)
+		config.invertedBackgroundColour = colourInverted(config.backgroundColour = bgColour);
 	updateCanvas(false, false);
 	removeRainGlareHack();
 };
@@ -537,12 +655,23 @@ const wallpaperMediaPropertiesListener = event => {
 
 const wallpaperMediaThumbnailListener = event => {
 	console.log("thumbnail", event);	// todo remove
-	config.albumCoverArt.src = event.thumbnail;
-	document.body.style['background-color'] = event.primaryColor;
-	config.trackTitle.style.color = event.textColor;
-	config.artist.style.color = event.textColor;
-	if (config.audioChangeColour)
-		changeColors(parseHexColor(event.textColor), parseHexColor(event.primaryColor));
+	if (config.audioChangeColour) {
+		config.albumSource = event.thumbnail;
+		config.albumCoverArt.src = event.thumbnail;
+		config.trackTitle.style.color = event.textColor;
+		config.artist.style.color = event.textColor;
+		config.songTextColour = parseHexColour(event.textColor);
+		config.songPrimaryColour = parseHexColour(event.primaryColor);
+		let fgcol, bgcol;
+		if (config.audioChangeRainColourOnly) {
+			fgcol = config.songPrimaryColour;
+			bgcol = config.userBackgroundColour;
+		} else {
+			fgcol = config.songTextColour;
+			bgcol = config.songPrimaryColour;
+		}
+		changeColors(fgcol, bgcol);
+	}
 };
 
 const wallpaperMediaPlaybackListener = event => {
@@ -556,11 +685,15 @@ const wallpaperMediaTimelineListener = event => {
 	console.log("timeline", event);	// todo remove
 	if (!config.audioFadeInRain || config.audioPlaybackState !== window.wallpaperMediaIntegration.PLAYBACK_PLAYING)
 		return;
+	// if (!config.parabolicFade || !config.parabolicFade.hasRoots(0, event.duration))
+	// 	config.parabolicFade = createParabolicFade(event.duration);
+	// config.rainResetChance = -config.parabolicFade.applyNormalized(event.position) + 1; // flip the parabola then push above abscissa 
+	// console.log(config.rainResetChance, "=", -config.parabolicFade.applyNormalized(event.position) + 1, "*", config.currentRainResetChance);
 	const percentage = event.position / event.duration;
 	const isStart = event.position < config.audioFadeInDuration;
-	if (isStart || event.position > event.duration - config.audioFadeInDuration)
+	if (isStart || event.position > event.duration - config.audioFadeInDuration) {
 		config.rainResetChance = parametricGaussian(percentage, 1, isStart ? 0 : 1);
-	else
+	} else
 		config.rainResetChance = config.currentRainResetChance;
 };
 
@@ -587,6 +720,9 @@ window.wallpaperPropertyListener = {
 				console.log("Updating", key, "to", v);
 			}
 		}
+		if (properties.fps) {
+            config.animationFrameDuration = (1 / properties.fps) * 1000;
+        }
 	}
 };
 

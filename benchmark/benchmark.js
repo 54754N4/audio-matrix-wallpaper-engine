@@ -102,7 +102,6 @@ const getColorIndicesForCoord = (x, y, width) => {
 };
 
 const CARDINALS = Object.freeze({
-    NOP: [0, 0],
     NORTH: [0, -1],
     SOUTH: [0, 1],
     WEST: [-1, 0],
@@ -113,11 +112,16 @@ const CARDINALS = Object.freeze({
     SOUTH_WEST: [-1, 1],
 });
 
+const CARDINALS_NOP = Object.freeze({
+    NOP: [0, 0],
+    ...CARDINALS
+});
+
 const pixelNeighbours = function*(index, imageData) {
     const width = imageData.width;
     const x = (index/4)%width;
     const y = Math.floor((index/4)/width);
-    const neighbours = Object.values(CARDINALS)
+    const neighbours = Object.values(CARDINALS_NOP)
         .map(coords => [x + coords[0], y + coords[1], width])
         .map(args => getColorIndicesForCoord(...args))
         .map(indices => indices.map(i => imageData.data[i]))
@@ -191,8 +195,8 @@ const calculateDensityChar = (...char) => {
     clearCanvas();
     drawChar(char);
     let extracted = extractGrayscale();
-    return naiveDensityCalculation(extracted);
-    // return sumNeighboursDensityCalculation(extracted);
+    // return naiveDensityCalculation(extracted);
+    return sumNeighboursDensityCalculation(extracted);
 };
 
 

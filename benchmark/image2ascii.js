@@ -30,6 +30,9 @@ const createAsciiArtCanvas = (imageElement, maxWidth, maxHeight, fontSize) => {
     canvas.height = scaledFit.height;
     let ctx = canvas.getContext('2d', options);
 
+    // x_scale = target_width / image_width / Math.floor(font_size)
+    // y_scale = target_height / image_height / Math.floor(font_size)
+
     // Scale the canvas context to fit the image
     const cols = Math.floor(scaledFit.width / fontSize);
     const rows = Math.floor(scaledFit.height / fontSize);
