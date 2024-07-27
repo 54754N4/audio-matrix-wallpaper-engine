@@ -1,6 +1,6 @@
 {
 	"contentrating" : "Everyone",
-	"description" : "RGB sliders can be manipulated by hovering with the mouse as such (or just disable and control from wallpaper engine 🤷):\n- Red: Top of the screen (left: 0, right: 255)\n- Green: Right of the screen (top: 0, bottom: 255)\n- Blue: Bottom of the screen (right: 0, left: 255)\n\nAudio reaction can be disabled or you can choose between the default:\n- rain drops flowing backwards (if their respective frequencies have sound above a threshold)\n- or alternatively rain drops freeze on audio\n\nRain can change color based on the playing media and the albums are drawn using unicode",
+	"description" : "Rain can change color based on the playing media and the albums are drawn using text.\n\n# Color Spinners\n\nRGB sliders can be manipulated by hovering with the mouse as such (or just disable and control from wallpaper engine 🤷):\n- Red: Top of the screen (left: 0, right: 255)\n- Green: Right of the screen (top: 0, bottom: 255)\n- Blue: Bottom of the screen (right: 0, left: 255)\n\n# Audio Reactions\n\nAudio reaction can be disabled or you can choose between the default:\n- rain drops flowing backwards (if their respective frequencies have sound above a threshold)\n- or alternatively rain drops freeze on audio",
 	"file" : "index.html",
 	"general" : 
 	{
@@ -41,10 +41,10 @@
 			{
 				"condition" : "audiochangecolour.value",
 				"fraction" : true,
-				"index" : 16,
+				"index" : 17,
 				"max" : 1,
 				"min" : 0,
-				"order" : 116,
+				"order" : 117,
 				"precision" : 3,
 				"step" : 0.01,
 				"text" : "audioalbumxpercent",
@@ -55,10 +55,10 @@
 			{
 				"condition" : "audiochangecolour.value",
 				"fraction" : true,
-				"index" : 17,
+				"index" : 18,
 				"max" : 1,
 				"min" : 0,
-				"order" : 117,
+				"order" : 118,
 				"precision" : 3,
 				"step" : 0.01,
 				"text" : "audioalbumypercent",
@@ -86,16 +86,14 @@
 			"audiofadeinduration" : 
 			{
 				"condition" : "audiochangecoulour.value && audiofadeinrain.value",
-				"fraction" : true,
-				"index" : 14,
+				"fraction" : false,
+				"index" : 15,
 				"max" : 30,
 				"min" : 0,
-				"order" : 114,
-				"precision" : 2,
-				"step" : 0.1,
+				"order" : 115,
 				"text" : "audiofadeinduration",
 				"type" : "slider",
-				"value" : 10
+				"value" : 1
 			},
 			"audiofadeinrain" : 
 			{
@@ -106,11 +104,31 @@
 				"type" : "bool",
 				"value" : true
 			},
+			"audiofadestrategy" : 
+			{
+				"condition" : "audiochangecolour.value && audiofadeinrain.value",
+				"index" : 14,
+				"options" : 
+				[
+					{
+						"label" : "gaussian",
+						"value" : "gaussian"
+					},
+					{
+						"label" : "parabolic",
+						"value" : "parabolic"
+					}
+				],
+				"order" : 114,
+				"text" : "audiofadestrategy",
+				"type" : "combo",
+				"value" : "parabolic"
+			},
 			"audioreactfreeze" : 
 			{
 				"condition" : "audiochangecolour.value",
-				"index" : 15,
-				"order" : 115,
+				"index" : 16,
+				"order" : 116,
 				"text" : "audioreactfreeze",
 				"type" : "bool",
 				"value" : false
@@ -187,7 +205,7 @@
 				"step" : 0.001,
 				"text" : "rainresetchance",
 				"type" : "slider",
-				"value" : 0.975
+				"value" : 0.025
 			},
 			"schemecolor" : 
 			{
@@ -215,7 +233,7 @@
 	"tags" : [ "Abstract" ],
 	"title" : "Responsive Matrix",
 	"type" : "web",
-	"version" : 20,
+	"version" : 21,
 	"visibility" : "public",
 	"workshopid" : "1605157424",
 	"workshopurl" : "steam://url/CommunityFilePage/1605157424"

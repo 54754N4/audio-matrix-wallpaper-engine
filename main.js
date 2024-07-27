@@ -48,6 +48,28 @@ const colorDistance = (c1, c2, alpha=false) => Math.sqrt([
 	.map(e => e**2)
 	.reduce((acc, curr) => acc + curr, 0));
 
+const colorAlongVector = (c1, c2, p=0.1) => {
+	const [MIN, MAX] = [0, 255];
+	if (c1.R == c2.R && c1.G == c2.G && c1.B == c2.B) {
+		c2 = {
+			R: c2.R == MIN ? MAX : MIN,
+			G: c2.G == MIN ? MAX : MIN,
+			B: c2.B == MIN ? MAX : MIN
+		};
+	}
+	const clamp = value => Math.max(MIN, Math.min(MAX, value));
+	const [dr, dg, db] = [Math.abs(c2.R - c1.R), Math.abs(c2.G - c1.G), Math.abs(c2.B - c1.B)];
+	let c3 = c2;
+	do {
+		c3.R = clamp(Math.round(c3.R + p * dr));
+		c3.G = clamp(Math.round(c3.G + p * dg));
+		c3.B = clamp(Math.round(c3.B + p * db));
+		if ((c3.R == MAX && c3.G == MAX && c3.B == MAX) || (c3.R == MIN && c3.G == MIN && c3.B == MIN))
+			break;
+	} while (colorDistance(c1, c3) < config.colorDistanceThreshold);
+	return c3;
+};
+
 const collisionDectection = Object.freeze({
 	rect2rect: (x1, y1, w1, h1, x2, y2, w2, h2) => x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2,
 	circle2circle: (x1, y1, radius1, x2, y2, radius2) => Math.sqrt((x1 - x2)**2 + (y1 - y2)**2) < radius1 + radius2,
@@ -65,7 +87,6 @@ const parametricGaussian = (x, a=1, b=0, c=Math.sqrt(1/2)) => {
 
 const gaussian = x => parametricGaussian(x);	// reduces to f: x -> exp(-x^2)
 
-
 /**
  * Creates a parabola that guarantees that the roots are:
  * - 0 (e.g. the start of the song)
@@ -73,16 +94,21 @@ const gaussian = x => parametricGaussian(x);	// reduces to f: x -> exp(-x^2)
  * Creates parametrized polynomials of the form x -> -x(x-length) = -x^2 + l.x
  * that can then be normalized by dividing by the vertex height.
  */
-const createParabolicFade = l => new Polynomial2(-1, l);
+const createParabolicFade = (length, crossfade) => {
+	if (!crossfade)
+		crossfade = config.audioFadeInDuration;
+	return new Polynomial2(-1, crossfade, length - crossfade, true);
+};
 
 class Polynomial2 {
 	constructor(a=0, b=0, c=0, gaveRoots=false) {
 		if (gaveRoots) {
 			this.a = a;
-			this.b = - a * (b + c);
-			this.c = a * b * c;
 			this.r1 = b;
 			this.r2 = c;
+			this.b = - a * (b + c);
+			this.c = a * b * c;
+			// Since: a(x-r1)(x-r2) == a.x^2 -a.(r2 + r1).x + a.r1.r2)
 		} else {
 			this.a = a;
 			this.b = b;
@@ -109,7 +135,7 @@ class Droplet {
 	constructor(x) {
 		this.x = x;
 		this.y = 1;
-		this.dx = 1;
+		this.dy = 1;
 		this.offset = 1;
 		this.fontSize = config.fontSize;
 	}
@@ -122,17 +148,20 @@ class Droplet {
 		return Math.floor(this.y * this.fontSize);
 	}
 
-	step = (dx=this.dx, offset=this.offset) => this.y += dx * offset;
-	stepUp = (offset=this.offset) => this.step(-1, offset);
-	stepDown = (offset=this.offset) => this.step(1, offset);
-
-	stepIf(predicate, dx=this.dx, offset=this.offset) {
-		if (predicate) 
-			this.step(dx, offset);
+	step = () => {
+		this.y += this.dy * this.offset;
 	}
 
+	stepDown = (offset=null) => {
+		if (!offset)
+			offset = this.offset;
+		this.y += offset;
+	}
+
+	hasOverflown = () => this.y * this.fontSize >= globals.canvas.height;
+	hasUnderflown = () => this.y < 0;
+
 	render() {
-		const canvas = globals.canvas;
 		const ctx = globals.ctx;
 		const actualX = this.actualX;
 		const actualY = this.actualY;
@@ -152,13 +181,13 @@ class Droplet {
 			ctx.restore();
 			return;	// optimisation - we know it doesn't need reset at this point
 		}
-		if (this.dx > 0 && actualY >= canvas.height && Math.random() > config.rainResetChance) {
-			this.y = 0;
+		if (this.hasUnderflown()) {
+			this.y = Math.floor(globals.canvas.height / this.fontSize) + 1;
 			if (config.variableFontSize)
 				this.fontSize = variableFontSize();
 		}
-		if (this.dx < 0 && actualY <= config.fontSize) {
-			this.y = canvas.height;
+		else if (this.hasOverflown() && Math.random() < config.rainResetChance) {
+			this.y = 0;
 			if (config.variableFontSize)
 				this.fontSize = variableFontSize();
 		}
@@ -214,6 +243,14 @@ class Matrix {
 				return false;
 		return true;
 	}
+
+	render(dropletConsumer = droplet => droplet.step()) {
+		updateCanvas(false);
+		for (const droplet of this.droplets()) {
+			droplet.render();
+			dropletConsumer(droplet);
+		}
+	}
 }
 
 const getPreferredDropCount = () => Math.round(globals.canvas.width / config.fontSize);
@@ -251,7 +288,7 @@ const updateCanvas = (resize, fill=true) => {
 	(fill ? globals.ctx.fillRect : globals.ctx.clearRect).apply(globals.ctx, [0, 0, globals.canvas.width, globals.canvas.height]);
 	globals.ctx.fillStyle = getForegroundStyle();
 	globals.ctx.font = `${config.fontSize}px ${config.fontFamily}`;
-	if (config.albumCoverArtAsciiCanvas !== null)
+	if (config.audioChangeColour && config.albumCoverArtAsciiCanvas !== null)
 		globals.ctx.drawImage(config.albumCoverArtAsciiCanvas.canvas, config.albumBoundingBox.x, config.albumBoundingBox.y);
 };
 
@@ -285,7 +322,7 @@ const calcMaxExpansion = (imgWidth, imgHeight, maxWidth, maxHeight) => {
 };
 
 const updateAlbumDrawingBox = () => {
-	if (config.albumCoverArt === null || !config.albumCoverArt.width || !config.albumCoverArt.height)
+	if (config.albumCoverArt === null || !config.albumCoverArt.src || !config.audioChangeColour || !config.albumCoverArt.width || !config.albumCoverArt.height)
 		return;
 	const xPadding = window.visualViewport.width * config.audioAlbumXPercent;
 	const yPadding = window.visualViewport.height * config.audioAlbumYPercent;
@@ -420,12 +457,12 @@ const paramMapping = {
 		update: fontSize => config.fontSize = fontSize,
 	},
 	variablefontsize: {
-		default: true,
+		default: false,
 		parse: parseBool,
 		update: vary => {
 			config.variableFontSize = vary;
 			for (const drop of globals.matrix.droplets())
-				drop.fontSize = vary ? variableFontSize() : config.fontSize;
+				drop.fontSize = vary ? variableFontSize() : config.fontSize ? config.fontSize : paramMapping.fontsize.default;
 		},
 	},
 	fontsizevariability: {
@@ -485,7 +522,7 @@ const paramMapping = {
 		update: colorSpinners => config.colorSpinners = colorSpinners,
 	},
 	rainresetchance: {
-		default: 0.975,
+		default: 0.025,
 		parse: parseFloat,
 		update: chance => {
 			config.rainResetChance = chance;
@@ -512,19 +549,17 @@ const paramMapping = {
 		parse: parseBool,
 		update: change => {
 			config.audioChangeColour = change;
-			if (change) {
-				config.colorSpinners = false;
-				if (config.songTextColour && config.songPrimaryColour) {
-					const bg = config.audioChangeRainColourOnly ? config.userBackgroundColour : config.songPrimaryColour;
-					changeColors(config.songTextColour, bg);
-				}
-			} else
-				changeColors(config.userForegroundColour, config.userBackgroundColour);
 			if (change)
-				config.albumCoverArt.src = config.albumSource;
-			else {
-				config.albumCoverArt.setAttribute('src', '');
-				config.albumBoundingBox = { x:0, y:0, width:0, height:0 };
+				config.colorSpinners = false;
+			if (config.albumBoundingBox) {
+				config.albumBoundingBox = { 
+					x: config.albumBoundingBox.x,
+					y: config.albumBoundingBox.y,
+					width: change && config.albumCoverArtAsciiCanvas && config.albumFontSize ?
+						config.albumCoverArtAsciiCanvas.cols * config.albumFontSize : 0,
+					height: change && config.albumCoverArtAsciiCanvas && config.albumFontSize ?
+						config.albumCoverArtAsciiCanvas.rows * config.albumFontSize : 0
+				};
 			}
 		},
 	},
@@ -535,8 +570,6 @@ const paramMapping = {
 			config.audioChangeRainColourOnly = change;
 			if (change)
 				config.colorSpinners = false;
-			const bg = change ? config.userBackgroundColour : config.songPrimaryColour;
-			changeColors(config.songTextColour, bg);
 		},
 	},
 	audiofadeinrain: {
@@ -545,9 +578,15 @@ const paramMapping = {
 		update: fade => config.audioFadeInRain = fade,
 	},
 	audiofadeinduration: {
-		default: 10,
+		default: 1,
 		parse: parseInt,
 		update: duration => config.audioFadeInDuration = duration,
+	},
+	audiofadestrategy: {
+		default: "parabolic",
+		update: strategy => {
+			config.audioFadeStrategy = Object.keys(fadeStrategies).includes(strategy) ? strategy  : "parabolic";
+		}
 	},
 	audioalbumxpercent: {
 		default: 0.2,
@@ -571,25 +610,27 @@ const config = {
 	alphabet: paramMapping.alphabet.default,
 	fontFamily: "Courier New",
 	fontSize: paramMapping.fontsize.default,
+	fontSizeVariability: paramMapping.fontsizevariability.default,
 	variableFontSize: paramMapping.variablefontsize.default,
 	albumFontSize: paramMapping.albumfontsize.default,
-	fontSizeVariability: paramMapping.fontsizevariability.default,
 	animationFrameDuration: paramMapping.animationframeduration.default,
 	userForegroundColour: paramMapping.fgcolour.default,
 	userBackgroundColour: paramMapping.bgcolour.default,
 	songPrimaryColour: null,
 	songTextColour: null,
-	songSrc: null,
 	foregroundColour: paramMapping.fgcolour.default,
-	invertedForegroundColour: colourInverted(paramMapping.fgcolour.default),
 	backgroundColour: paramMapping.bgcolour.default,
+	invertedForegroundColour: colourInverted(paramMapping.fgcolour.default),
 	invertedBackgroundColour: colourInverted(paramMapping.bgcolour.default),
 	foregroundTransparency: 0.9,
 	backgroundTransparency: 0.06, // 0.15, // 0.04
+	colorDistanceThreshold: 100,	// used to make sure foreground colour and background aren't too similar
 	colorSpinners: paramMapping.colorspinners.default,
+	rainResetCooldown: 10,
 	rainResetChance: paramMapping.rainresetchance.default,
 	currentRainResetChance: this.rainResetChance,
-	audioPlaybackState: 2,
+	audioPlaybackState: window.wallpaperMediaIntegration.PLAYBACK_PLAYING,
+	audioFadeStrategy: paramMapping.audiofadestrategy.default,
 	audioFadeInRain: paramMapping.audiofadeinrain.default,	// overrides rain reset chance
 	audioFadeInDuration: paramMapping.audiofadeinduration.default,
 	audioReactThreshold: paramMapping.audioreactthreshold.default,
@@ -631,14 +672,34 @@ const getInvertedForegroundStyle = () => getColorStyle(config.invertedForeground
 const getBackgroundStyle = () => getColorStyle(config.backgroundColour, config.backgroundTransparency);
 const getInvertedBackgroundStyle = () => getColorStyle(config.invertedBackgroundColour, config.backgroundTransparency);
 
+const gaussianFade = (event) => {
+	const percentage = event.position / event.duration;
+	const isStart = event.position < config.audioFadeInDuration;
+	if (isStart || event.position > event.duration - config.audioFadeInDuration) {
+		config.rainResetChance = parametricGaussian(percentage, 1, isStart ? 0 : 1);
+	} else
+		config.rainResetChance = config.currentRainResetChance;
+};
+
+const parabolicFade = (event) => {
+	if (!config.parabolicFade || !config.parabolicFade.hasRoots(config.audioFadeInDuration, event.duration - config.audioFadeInDuration))
+		config.parabolicFade = createParabolicFade(event.duration);
+	config.rainResetChance = config.parabolicFade.applyNormalized(event.position) * config.currentRainResetChance;
+};
+
+const fadeStrategies = Object.freeze({
+	gaussian: gaussianFade,
+	parabolic: parabolicFade
+});
+
 /* Wallpaper engine */
 
 const wallpaperAudioListener = audioArray => {
 	const negativeDirection = config.audioReactFreeze ? 0 : -1;
-	globals.matrix.forEach(drop => {
-		const bucket = Math.floor(drop.x / config.audioBuckets);
-		drop.dx = audioArray[bucket] > config.audioReactThreshold ? negativeDirection : 1;
-	});
+	for (const droplet of globals.matrix.droplets()) {
+		const bucket = Math.floor(droplet.x / config.audioBuckets);
+		droplet.dy = audioArray[bucket] > config.audioReactThreshold ? negativeDirection : 1;
+	}
 };
 
 // Media event properties docs: https://docs.wallpaperengine.io/en/web/audio/media.html#available-media-integration-listeners
@@ -664,7 +725,9 @@ const wallpaperMediaThumbnailListener = event => {
 		config.songPrimaryColour = parseHexColour(event.primaryColor);
 		let fgcol, bgcol;
 		if (config.audioChangeRainColourOnly) {
-			fgcol = config.songPrimaryColour;
+			fgcol = colorDistance(config.userBackgroundColour, config.songPrimaryColour) < config.colorDistanceThreshold ?
+				colorAlongVector(config.userBackgroundColour, config.songPrimaryColour) :
+				config.songPrimaryColour;
 			bgcol = config.userBackgroundColour;
 		} else {
 			fgcol = config.songTextColour;
@@ -677,24 +740,24 @@ const wallpaperMediaThumbnailListener = event => {
 const wallpaperMediaPlaybackListener = event => {
 	console.log("playback", event);	// todo remove
 	config.audioPlaybackState = event.state;
-	if (event.state !== window.wallpaperMediaIntegration.PLAYBACK_PLAYING)
-		config.rainResetChance = config.currentRainResetChance;
+	switch (event.state) {
+		case window.wallpaperMediaIntegration.PLAYBACK_PLAYING:
+			break;
+		case window.wallpaperMediaIntegration.PLAYBACK_STOPPED:
+		case window.wallpaperMediaIntegration.PLAYBACK_PAUSED:
+		default: 
+			// breaks crossfade cause WE doesn't send playback events lol?..
+			// config.rainResetChance = config.currentRainResetChance;
+	}
 };
 
 const wallpaperMediaTimelineListener = event => {
 	console.log("timeline", event);	// todo remove
-	if (!config.audioFadeInRain || config.audioPlaybackState !== window.wallpaperMediaIntegration.PLAYBACK_PLAYING)
-		return;
-	// if (!config.parabolicFade || !config.parabolicFade.hasRoots(0, event.duration))
-	// 	config.parabolicFade = createParabolicFade(event.duration);
-	// config.rainResetChance = -config.parabolicFade.applyNormalized(event.position) + 1; // flip the parabola then push above abscissa 
-	// console.log(config.rainResetChance, "=", -config.parabolicFade.applyNormalized(event.position) + 1, "*", config.currentRainResetChance);
-	const percentage = event.position / event.duration;
-	const isStart = event.position < config.audioFadeInDuration;
-	if (isStart || event.position > event.duration - config.audioFadeInDuration) {
-		config.rainResetChance = parametricGaussian(percentage, 1, isStart ? 0 : 1);
-	} else
+	if (!config.audioChangeColour || !config.audioFadeInRain || config.audioPlaybackState !== window.wallpaperMediaIntegration.PLAYBACK_PLAYING) {
 		config.rainResetChance = config.currentRainResetChance;
+		return;
+	}
+	fadeStrategies[config.audioFadeStrategy](event);
 };
 
 const hookWallpaperEngine = () => [
@@ -715,7 +778,7 @@ window.wallpaperPropertyListener = {
 		for (const [key, val] of Object.entries(properties)) {
 			if (paramKeys.includes(key)) {
 				const param = paramMapping[key];
-				const v = param.parse(val.value);
+				const v = param.parse ? param.parse(val.value) : val.value;
 				param.update(v);
 				console.log("Updating", key, "to", v);
 			}
@@ -764,24 +827,15 @@ const synchronizedRender = function(
 };
 
 const drawUniformPass = synchronizedRender(
+	_ => globals.matrix.render(droplet => droplet.stepDown()),
+	() => globals.matrix.allMatch(droplet => droplet.hasOverflown()),
 	_ => {
-		updateCanvas(false);
-		for (const drop of globals.matrix.droplets()){
-			drop.render();
-			drop.stepDown();
-		}
-	},
-	() => globals.matrix.allMatch(droplet => droplet.actualY >= globals.canvas.height + config.fontSize),
-	_ => requestAnimationFrame(drawRain)
+		globals.matrix.forEach(droplet => droplet.y = 0);
+		requestAnimationFrame(drawRain);
+	}
 );
 
-const drawRain = synchronizedRender(_ => {
-	updateCanvas(false);
-	for (const drop of globals.matrix.droplets()){
-		drop.render();
-		drop.step();
-	}
-});
+const drawRain = synchronizedRender(_ => globals.matrix.render());
 
 /* Driver */
 
