@@ -196,16 +196,17 @@ class Droplet {
 
 class Matrix {
 	constructor() {
-		this.drops = range(globals.canvas.width / config.fontSize)
-			.flatMap(x => range(variableDropCount()).map(() => new Droplet(x)));
+		this.cols = globals.canvas.width / config.fontSize;
+		this.drops = range(this.cols).flatMap(x => 
+			range(variableDropCount()).map(() => new Droplet(x))
+		);
 	}
 
 	get dropCount() {
 		return this.drops.length;
 	}
 
-	length = () => this.drops.map(drop => drop.x)
-			.reduce((acc, curr) => Math.max(acc, curr), 0);
+	length = () => this.drops.map(drop => drop.x).reduce((acc, curr) => Math.max(acc, curr), 0);
 
 	get = i => this.drops[i];
 
@@ -826,14 +827,14 @@ const synchronizedRender = function(
 	return synchronizedRenderCallback;
 };
 
-const drawUniformPass = synchronizedRender(
-	_ => globals.matrix.render(droplet => droplet.stepDown()),
-	() => globals.matrix.allMatch(droplet => droplet.hasOverflown()),
-	_ => {
-		globals.matrix.forEach(droplet => droplet.y = 0);
-		requestAnimationFrame(drawRain);
-	}
-);
+// const drawUniformPass = synchronizedRender(
+// 	_ => globals.matrix.render(droplet => droplet.stepDown()),
+// 	() => globals.matrix.allMatch(droplet => droplet.hasOverflown()),
+// 	_ => {
+// 		globals.matrix.forEach(droplet => droplet.y = 0);
+// 		requestAnimationFrame(drawRain);
+// 	}
+// );
 
 const drawRain = synchronizedRender(_ => globals.matrix.render());
 
@@ -848,10 +849,11 @@ const init = () => {
 	globals.ctx = globals.canvas.getContext("2d", { alpha: false });
 	updateCanvas(true);
 	setupSpinners();
-	setupWallpaperEngineMediaIntegration();
 	globals.matrix = new Matrix();
 	config.audioBuckets = globals.matrix.length() / MAX_AUDIO_ARRAY_SIZE;
+	setupWallpaperEngineMediaIntegration();
 
-	requestAnimationFrame(drawUniformPass);
+	// requestAnimationFrame(drawUniformPass);
+	requestAnimationFrame(drawRain);
 	hookWallpaperEngine();
 };
