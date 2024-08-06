@@ -1,3 +1,5 @@
+const drawingContextOptions = { alpha: true, willReadFrequently: true };
+
 const Predicates = Object.freeze({
 	NEVER: () => false,
 	ALWAYS: () => true,
@@ -158,11 +160,11 @@ class Droplet {
 		this.y += offset;
 	}
 
-	hasOverflown = () => this.y * this.fontSize >= globals.canvas.height;
+	hasOverflown = () => this.y * this.fontSize >= globals.wallpaper.canvas.height;
 	hasUnderflown = () => this.y < 0;
 
 	render() {
-		const ctx = globals.ctx;
+		const ctx = globals.wallpaper.ctx;
 		const actualX = this.actualX;
 		const actualY = this.actualY;
 		const overAlbum = collisionDectection.rect2rect(
@@ -182,7 +184,7 @@ class Droplet {
 			return;	// optimisation - we know it doesn't need reset at this point
 		}
 		if (this.hasUnderflown()) {
-			this.y = Math.floor(globals.canvas.height / this.fontSize) + 1;
+			this.y = Math.floor(globals.wallpaper.canvas.height / this.fontSize) + 1;
 			if (config.variableFontSize)
 				this.fontSize = variableFontSize();
 		}
@@ -195,8 +197,8 @@ class Droplet {
 }
 
 class Matrix {
-	constructor() {
-		this.cols = globals.canvas.width / config.fontSize;
+	constructor(cols) {
+		this.cols = cols;
 		this.drops = range(this.cols).flatMap(x => 
 			range(variableDropCount()).map(() => new Droplet(x))
 		);
@@ -254,24 +256,24 @@ class Matrix {
 	}
 }
 
-const getPreferredDropCount = () => Math.round(globals.canvas.width / config.fontSize);
+const getPreferredDropCount = () => Math.round(globals.wallpaper.canvas.width / config.fontSize);
 
 const variableFontSize = () => randOffset(config.fontSize, config.fontSizeVariability);
 
 const variableDropCount = () => Math.round(randOffset(4, 1));
 
 const clearExcept = (x, y, w, h, fill=true) => {
-	const target = fill ? globals.ctx.fillRect : globals.ctx.clearRect;
-	target.apply(globals.ctx, [0, 0, globals.canvas.width, y]);		// top
-	target.apply(globals.ctx, [0, y + h, globals.canvas.width, globals.canvas.height]);	// bottom
-	target.apply(globals.ctx, [0, 0, x, globals.canvas.height]);	// left
-	target.apply(globals.ctx, [x + w, 0, globals.canvas.width, globals.canvas.height]);	// right
+	const target = fill ? globals.wallpaper.ctx.fillRect : globals.wallpaper.ctx.clearRect;
+	target.apply(globals.wallpaper.ctx, [0, 0, globals.wallpaper.canvas.width, y]);		// top
+	target.apply(globals.wallpaper.ctx, [0, y + h, globals.wallpaper.canvas.width, globals.wallpaper.canvas.height]);	// bottom
+	target.apply(globals.wallpaper.ctx, [0, 0, x, globals.wallpaper.canvas.height]);	// left
+	target.apply(globals.wallpaper.ctx, [x + w, 0, globals.wallpaper.canvas.width, globals.wallpaper.canvas.height]);	// right
 };
 
 const clearExceptAlbum = (fill=true) => {
 	if (albumCoverArt === null) {	// didn't receive from WE yet
-		const target = fill ? globals.ctx.fillRect : globals.ctx.clearRect;
-		target.apply(ctx, [0, 0, globals.canvas.width, globals.canvas.height]);
+		const target = fill ? globals.wallpaper.ctx.fillRect : globals.wallpaper.ctx.clearRect;
+		target.apply(ctx, [0, 0, globals.wallpaper.canvas.width, globals.wallpaper.canvas.height]);
 		return;
 	}
 	clearExcept(config.albumBoundingBox.x, config.albumBoundingBox.y, config.albumBoundingBox.width, config.albumBoundingBox.height, fill);
@@ -279,25 +281,31 @@ const clearExceptAlbum = (fill=true) => {
 
 const updateCanvas = (resize, fill=true) => {
 	if (resize) {
-		globals.canvas.height = window.innerHeight;
-		globals.canvas.width = window.innerWidth;
+		globals.wallpaper.canvas.height = window.innerHeight;
+		globals.wallpaper.canvas.width = window.innerWidth;
 		const preferred = getPreferredDropCount();
-		if (globals.matrix && globals.matrix.length() != preferred)
-			globals.matrix.resize(preferred);
+		if (globals.wallpaper.matrix && globals.wallpaper.matrix.length() != preferred)
+			globals.wallpaper.matrix.resize(preferred);
 	}
-	globals.ctx.fillStyle = getBackgroundStyle();
-	(fill ? globals.ctx.fillRect : globals.ctx.clearRect).apply(globals.ctx, [0, 0, globals.canvas.width, globals.canvas.height]);
-	globals.ctx.fillStyle = getForegroundStyle();
-	globals.ctx.font = `${config.fontSize}px ${config.fontFamily}`;
+	globals.wallpaper.ctx.fillStyle = getBackgroundStyle();
+	(fill ? globals.wallpaper.ctx.fillRect : globals.wallpaper.ctx.clearRect).apply(globals.wallpaper.ctx, [0, 0, globals.wallpaper.canvas.width, globals.wallpaper.canvas.height]);
+	globals.wallpaper.ctx.fillStyle = getForegroundStyle();
+	globals.wallpaper.ctx.font = `${config.fontSize}px ${config.fontFamily}`;
 	if (config.audioChangeColour && config.albumCoverArtAsciiCanvas !== null)
-		globals.ctx.drawImage(config.albumCoverArtAsciiCanvas.canvas, config.albumBoundingBox.x, config.albumBoundingBox.y);
+		globals.wallpaper.ctx.drawImage(config.albumCoverArtAsciiCanvas.canvas, config.albumBoundingBox.x, config.albumBoundingBox.y);
+	if (config.ledPlugin && globals.wallpaper.ctx) {
+		const width = config.keyboardEmulatedSize.width;
+		const height = config.keyboardEmulatedSize.height;
+		const encoded = getEncodedCanvasImageData(resizeCanvas(globals.wallpaper.canvas, width, height));
+		window.wpPlugins.led.setAllDevicesByImageData(encoded, width, height);
+	}
 };
 
 const removeRainGlareHack = () => {
-	globals.ctx.fillStyle = getBackgroundStyle();
-	globals.ctx.fillRect(0, 0, globals.canvas.width, globals.canvas.height);
-	globals.ctx.fillStyle = getForegroundStyle();
-	globals.ctx.fillRect(0, 0, globals.canvas.width, globals.canvas.height);
+	globals.wallpaper.ctx.fillStyle = getBackgroundStyle();
+	globals.wallpaper.ctx.fillRect(0, 0, globals.wallpaper.canvas.width, globals.wallpaper.canvas.height);
+	globals.wallpaper.ctx.fillStyle = getForegroundStyle();
+	globals.wallpaper.ctx.fillRect(0, 0, globals.wallpaper.canvas.width, globals.wallpaper.canvas.height);
 };
 
 const setupSpinners = () => {
@@ -392,8 +400,6 @@ const calcFitSize = (width, height, toFitWidth, toFitHeight) => {
     }
 };
 
-const drawingContextOptions = { alpha: true, willReadFrequently: true };
-
 // Function to create ASCII art canvas and draw the image
 const createAsciiArtCanvas = (maxWidth, maxHeight, fontSize) => {
 	let imageElement = document.getElementById('album_cover_art');
@@ -462,7 +468,7 @@ const paramMapping = {
 		parse: parseBool,
 		update: vary => {
 			config.variableFontSize = vary;
-			for (const drop of globals.matrix.droplets())
+			for (const drop of globals.wallpaper.matrix.droplets())
 				drop.fontSize = vary ? variableFontSize() : config.fontSize ? config.fontSize : paramMapping.fontsize.default;
 		},
 	},
@@ -648,12 +654,29 @@ const config = {
 	artist: null,
 	albumCoverArtAsciiCanvas: null,
 	parabolicFade: null,
+	ledPlugin: false,
+    cuePlugin: false,
+	keyboardEmulatedSize: { // it's better to choose something small like 100x20 for performance
+		width: 100,
+		height: 20
+	},
+	simulatedKeys: {
+		rows: 6,
+		cols: 22
+	}
 };
 
 const globals = {
-	matrix: null,
-	canvas: null,
-	ctx: null,
+	wallpaper: {
+		matrix: null,
+		canvas: null,
+		ctx: null
+	},
+	// keyboard: {
+	// 	matrix: null,
+	// 	canvas: null,
+	// 	ctx: null
+	// },
 	animationFrameRequestId: undefined,
 	previousExecution: document.timeline.currentTime,
 };
@@ -697,7 +720,7 @@ const fadeStrategies = Object.freeze({
 
 const wallpaperAudioListener = audioArray => {
 	const negativeDirection = config.audioReactFreeze ? 0 : -1;
-	for (const droplet of globals.matrix.droplets()) {
+	for (const droplet of globals.wallpaper.matrix.droplets()) {
 		const bucket = Math.floor(droplet.x / config.audioBuckets);
 		droplet.dy = audioArray[bucket] > config.audioReactThreshold ? negativeDirection : 1;
 	}
@@ -828,15 +851,55 @@ const synchronizedRender = function(
 };
 
 // const drawUniformPass = synchronizedRender(
-// 	_ => globals.matrix.render(droplet => droplet.stepDown()),
-// 	() => globals.matrix.allMatch(droplet => droplet.hasOverflown()),
+// 	_ => globals.wallpaper.matrix.render(droplet => droplet.stepDown()),
+// 	() => globals.wallpaper.matrix.allMatch(droplet => droplet.hasOverflown()),
 // 	_ => {
-// 		globals.matrix.forEach(droplet => droplet.y = 0);
+// 		globals.wallpaper.matrix.forEach(droplet => droplet.y = 0);
 // 		requestAnimationFrame(drawRain);
 // 	}
 // );
 
-const drawRain = synchronizedRender(_ => globals.matrix.render());
+const drawRain = synchronizedRender(_ => globals.wallpaper.matrix.render());
+
+/* Razor & iCue accessories RGB */
+
+window.wallpaperPluginListener = {
+    onPluginLoaded: function (name, version) {
+		switch (name) {
+			case 'led': 
+				// LED plugin loaded (works for all hardware)
+				config.ledPlugin = true;
+				break;
+			case 'cue':
+				// iCUE-specific plugin loaded, only needed if you want to utilize extra iCUE functions
+				config.cuePlugin = true;
+				break;
+		}
+    }
+};
+
+const getEncodedCanvasImageData = canvas => {
+	var context = canvas.getContext('2d');
+    var imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    var colorArray = [];
+
+    for (var d = 0; d < imageData.data.length; d += 4) {
+        var write = d / 4 * 3;
+        colorArray[write] = imageData.data[d];
+        colorArray[write + 1] = imageData.data[d + 1];
+        colorArray[write + 2] = imageData.data[d + 2];
+    }
+    return String.fromCharCode.apply(null, colorArray);
+};
+
+const resizeCanvas = (originalCanvas, desiredWidth, desiredHeight) => {
+	const resizedCanvas = document.createElement('canvas');
+	resizedCanvas.width = desiredWidth;
+	resizedCanvas.height = desiredHeight;
+	const ctx = resizedCanvas.getContext('2d');
+	ctx.drawImage(originalCanvas, 0, 0, desiredWidth, desiredHeight);
+	return resizedCanvas;
+};
 
 /* Driver */
 
@@ -845,12 +908,12 @@ const MAX_CHANNEL_SIZE = MAX_AUDIO_ARRAY_SIZE/2;
 
 const init = () => {
 	"use strict";
-	globals.canvas = document.getElementById('canvas_matrix');
-	globals.ctx = globals.canvas.getContext("2d", { alpha: false });
+	globals.wallpaper.canvas = document.getElementById('canvas_matrix');
+	globals.wallpaper.ctx = globals.wallpaper.canvas.getContext("2d", drawingContextOptions);
 	updateCanvas(true);
 	setupSpinners();
-	globals.matrix = new Matrix();
-	config.audioBuckets = globals.matrix.length() / MAX_AUDIO_ARRAY_SIZE;
+	globals.wallpaper.matrix = new Matrix(globals.wallpaper.canvas.width / config.fontSize);
+	config.audioBuckets = globals.wallpaper.matrix.length() / MAX_AUDIO_ARRAY_SIZE;
 	setupWallpaperEngineMediaIntegration();
 
 	// requestAnimationFrame(drawUniformPass);
