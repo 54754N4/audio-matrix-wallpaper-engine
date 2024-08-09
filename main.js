@@ -904,29 +904,22 @@ const cancelAnimationFrame = () => {
 	}
 };
 
-const renderingScheduler = function(
+const renderingScheduler = (
 	renderCallbacks,
 	globalCancelPredicate = Predicates.NEVER,
 	globalCancelCallback = _ => {}
-) {
-    let initialized = false;
+) => {
 	const synchronizedRenderCallback = timestamp => {
 		if (globalCancelPredicate()) {
 			cancelAnimationFrame();
 			globalCancelCallback(timestamp);
 			return;
 		}
-		if (!initialized) {
-			renderCallbacks.forEach(task => {
-				task.lastExecution = timestamp;
-			});
-			initialized = true;
-		}
 		renderCallbacks.forEach((task, index) => {
             const {
                 renderCallback,
                 durationAccessor,
-                lastExecution,
+                lastExecution = null,
                 cancelPredicate = Predicates.NEVER,
                 cancelCallback = _ => {}
             } = task;
@@ -936,7 +929,7 @@ const renderingScheduler = function(
                 cancelCallback(timestamp);
                 return;
             }
-            if (timestamp - lastExecution >= durationAccessor()) {
+            if (lastExecution == null || timestamp - lastExecution >= durationAccessor()) {
                 renderCallback(timestamp);
                 task.lastExecution = timestamp;
             }
