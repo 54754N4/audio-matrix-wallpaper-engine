@@ -133,21 +133,33 @@ class Polynomial2 {
 	applyNormalized = x => this.apply(x) / this.vertex.y;
 }
 
+const drawMatrixChar = (ctx, actualX, actualY) => {
+	const text = config.alphabet[Math.floor(Math.random() * config.alphabet.length)];
+	ctx.fillText(text, actualX, actualY);
+};
+
+const drawKeyboardCell = (ctx, actualX, actualY, size) => {
+	ctx.fillRect(actualX, actualY, size, size);
+};
+
 class Droplet {
-	constructor(x) {
+	constructor(x, canvas, ctx, cellRenderer = drawMatrixChar, size = config.fontSize) {
 		this.x = x;
 		this.y = 1;
 		this.dy = 1;
 		this.offset = 1;
-		this.fontSize = config.fontSize;
+		this.size = size;
+		this.canvas = canvas;
+		this.ctx = ctx;
+		this.cellRenderer = cellRenderer;
 	}
 
 	get actualX() {
-		return Math.floor(this.x * this.fontSize);
+		return Math.floor(this.x * this.size);
 	}
 
 	get actualY() {
-		return Math.floor(this.y * this.fontSize);
+		return Math.floor(this.y * this.size);
 	}
 
 	step = () => {
@@ -160,48 +172,48 @@ class Droplet {
 		this.y += offset;
 	}
 
-	hasOverflown = () => this.y * this.fontSize >= globals.wallpaper.canvas.height;
+	hasOverflown = () => this.y * this.size >= this.canvas.height;
 	hasUnderflown = () => this.y < 0;
 
 	render() {
-		const ctx = globals.wallpaper.ctx;
-		const actualX = this.actualX;
-		const actualY = this.actualY;
 		const overAlbum = collisionDectection.rect2rect(
-			actualX, actualY - this.fontSize,
-			this.fontSize, this.fontSize,
+			this.actualX, this.actualY - this.size,
+			this.size, this.size,
 			config.albumBoundingBox.x, config.albumBoundingBox.y,
 			config.albumBoundingBox.width, config.albumBoundingBox.height
 		);
 		if (overAlbum) {
-			ctx.save();
-			ctx.fillStyle = getInvertedForegroundStyle();
+			this.ctx.save();
+			this.ctx.fillStyle = getInvertedForegroundStyle();
 		}
-		const text = config.alphabet[Math.floor(Math.random() * config.alphabet.length)];
-		ctx.fillText(text, actualX, actualY);
+		this.cellRenderer(this.ctx, this.actualX, this.actualY, this.size);
 		if (overAlbum) {
-			ctx.restore();
+			this.ctx.restore();
 			return;	// optimisation - we know it doesn't need reset at this point
 		}
 		if (this.hasUnderflown()) {
-			this.y = Math.floor(globals.wallpaper.canvas.height / this.fontSize) + 1;
+			this.y = Math.floor(this.canvas.height / this.size) + 1;
 			if (config.variableFontSize)
-				this.fontSize = variableFontSize();
+				this.size = variableFontSize();
 		}
 		else if (this.hasOverflown() && Math.random() < config.rainResetChance) {
 			this.y = 0;
 			if (config.variableFontSize)
-				this.fontSize = variableFontSize();
+				this.size = variableFontSize();
 		}
 	}
 }
 
 class Matrix {
-	constructor(cols) {
+	static MAX_AUDIO_ARRAY_SIZE = 128;
+	static MAX_CHANNEL_SIZE = Matrix.MAX_AUDIO_ARRAY_SIZE / 2;
+
+	constructor(cols, canvas, ctx, cellRenderer, size) {
 		this.cols = cols;
-		this.drops = range(this.cols).flatMap(x => 
-			range(variableDropCount()).map(() => new Droplet(x))
+		this.drops = range(this.cols).flatMap(x =>
+			range(variableDropCount()).map(() => new Droplet(x, canvas, ctx, cellRenderer, size))
 		);
+		this.audioBuckets = this.length() / Matrix.MAX_AUDIO_ARRAY_SIZE;
 	}
 
 	get dropCount() {
@@ -248,10 +260,17 @@ class Matrix {
 	}
 
 	render(dropletConsumer = droplet => droplet.step()) {
-		updateCanvas(false);
 		for (const droplet of this.droplets()) {
 			droplet.render();
 			dropletConsumer(droplet);
+		}
+	}
+
+	handleAudioEvent(audioArray) {
+		const negativeDirection = config.audioReactFreeze ? 0 : -1;
+		for (const droplet of this.droplets()) {
+			const bucket = Math.floor(droplet.x / this.audioBuckets);
+			droplet.dy = audioArray[bucket] > config.audioReactThreshold ? negativeDirection : 1;
 		}
 	}
 }
@@ -279,7 +298,7 @@ const clearExceptAlbum = (fill=true) => {
 	clearExcept(config.albumBoundingBox.x, config.albumBoundingBox.y, config.albumBoundingBox.width, config.albumBoundingBox.height, fill);
 };
 
-const updateCanvas = (resize, fill=true) => {
+const updateCanvas = (resize=false, fill=true) => {
 	if (resize) {
 		globals.wallpaper.canvas.height = window.innerHeight;
 		globals.wallpaper.canvas.width = window.innerWidth;
@@ -288,15 +307,26 @@ const updateCanvas = (resize, fill=true) => {
 			globals.wallpaper.matrix.resize(preferred);
 	}
 	globals.wallpaper.ctx.fillStyle = getBackgroundStyle();
-	(fill ? globals.wallpaper.ctx.fillRect : globals.wallpaper.ctx.clearRect).apply(globals.wallpaper.ctx, [0, 0, globals.wallpaper.canvas.width, globals.wallpaper.canvas.height]);
+	const target = fill ? globals.wallpaper.ctx.fillRect : globals.wallpaper.ctx.clearRect;
+	target.apply(globals.wallpaper.ctx, [0, 0, globals.wallpaper.canvas.width, globals.wallpaper.canvas.height]);
 	globals.wallpaper.ctx.fillStyle = getForegroundStyle();
 	globals.wallpaper.ctx.font = `${config.fontSize}px ${config.fontFamily}`;
 	if (config.audioChangeColour && config.albumCoverArtAsciiCanvas !== null)
 		globals.wallpaper.ctx.drawImage(config.albumCoverArtAsciiCanvas.canvas, config.albumBoundingBox.x, config.albumBoundingBox.y);
-	if (config.ledPlugin && globals.wallpaper.ctx) {
-		const width = config.keyboardEmulatedSize.width;
-		const height = config.keyboardEmulatedSize.height;
-		const encoded = getEncodedCanvasImageData(resizeCanvas(globals.wallpaper.canvas, width, height));
+};
+
+const updateKeyboardCanvas = (fill=true) => {
+	if (window.wpPlugins && window.wpPlugins.led) {
+		/* Draws mini wallpaper on keyboard */
+		// globals.keyboard.ctx.drawImage(globals.wallpaper.canvas, 0, 0, config.keyboardEmulatedSize.width, config.keyboardEmulatedSize.height);
+		globals.keyboard.ctx.fillStyle = getBackgroundStyle(config.keyboardBackgroundTransparency);
+		const target = fill ? globals.keyboard.ctx.fillRect : globals.keyboard.ctx.clearRect;
+		target.apply(globals.keyboard.ctx, [0, 0, globals.keyboard.canvas.width, globals.keyboard.canvas.height]);
+		globals.keyboard.ctx.fillStyle = getForegroundStyle(config.keyboardForegroundTransparency);
+		if (config.keyboardDebug)
+			globals.wallpaper.ctx.drawImage(globals.keyboard.canvas, 0, 0);
+		const { width, height } = config.keyboardEmulatedSize;
+		const encoded = encodedCanvasForRGBHardware(resizeCanvas(globals.keyboard.canvas, width, height));
 		window.wpPlugins.led.setAllDevicesByImageData(encoded, width, height);
 	}
 };
@@ -350,7 +380,7 @@ const updateAlbumDrawingBox = () => {
 		width: config.albumCoverArtAsciiCanvas.cols * config.albumFontSize,
 		height: config.albumCoverArtAsciiCanvas.rows * config.albumFontSize,
 	};
-	updateCanvas(false);
+	updateCanvas();
 };
 
 const setupWallpaperEngineMediaIntegration = () => {
@@ -656,6 +686,10 @@ const config = {
 	parabolicFade: null,
 	ledPlugin: false,
     cuePlugin: false,
+	keyboardAnimationFrameDuration: 100,
+	keyboardDebug: false,
+	keyboardForegroundTransparency: 1,
+	keyboardBackgroundTransparency: 0.3,
 	keyboardEmulatedSize: { // it's better to choose something small like 100x20 for performance
 		width: 100,
 		height: 20
@@ -672,11 +706,11 @@ const globals = {
 		canvas: null,
 		ctx: null
 	},
-	// keyboard: {
-	// 	matrix: null,
-	// 	canvas: null,
-	// 	ctx: null
-	// },
+	keyboard: {
+		matrix: null,
+		canvas: null,
+		ctx: null
+	},
 	animationFrameRequestId: undefined,
 	previousExecution: document.timeline.currentTime,
 };
@@ -691,9 +725,17 @@ const changeColors = (fgColour, bgColour) => {
 };
 
 const getColorStyle = ({R, G, B}, alpha=1, space='rgba') => `${space}(${R}, ${G}, ${B}, ${alpha})`;
-const getForegroundStyle = () => getColorStyle(config.foregroundColour, config.foregroundTransparency);
+const getForegroundStyle = (transparency=null) => {
+	if (transparency == null)
+		transparency = config.foregroundTransparency;
+	return getColorStyle(config.foregroundColour, transparency);
+};
+const getBackgroundStyle = (transparency=null) => {
+	if (transparency == null)
+		transparency = config.backgroundTransparency;
+	return getColorStyle(config.backgroundColour, transparency); 
+};
 const getInvertedForegroundStyle = () => getColorStyle(config.invertedForegroundColour, config.foregroundTransparency);
-const getBackgroundStyle = () => getColorStyle(config.backgroundColour, config.backgroundTransparency);
 const getInvertedBackgroundStyle = () => getColorStyle(config.invertedBackgroundColour, config.backgroundTransparency);
 
 const gaussianFade = (event) => {
@@ -717,16 +759,9 @@ const fadeStrategies = Object.freeze({
 });
 
 /* Wallpaper engine */
-
-const wallpaperAudioListener = audioArray => {
-	const negativeDirection = config.audioReactFreeze ? 0 : -1;
-	for (const droplet of globals.wallpaper.matrix.droplets()) {
-		const bucket = Math.floor(droplet.x / config.audioBuckets);
-		droplet.dy = audioArray[bucket] > config.audioReactThreshold ? negativeDirection : 1;
-	}
-};
-
 // Media event properties docs: https://docs.wallpaperengine.io/en/web/audio/media.html#available-media-integration-listeners
+
+const wallpaperAudioListener = audioArray => globals.wallpaper.matrix.handleAudioEvent(audioArray);
 
 const wallpaperMediaStatusListener = event => {
 	console.log("status", event); // todo remove
@@ -813,55 +848,7 @@ window.wallpaperPropertyListener = {
 	}
 };
 
-/* Animation */
-
-const _requestAnimationFrame =  window.requestAnimationFrame || window.mozRequestAnimationFrame
-	|| window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
-const _cancelAnimationFrame = window.cancelAnimationFrame || window.mozCancelAnimationFrame;
-
-const requestAnimationFrame = callback => globals.animationFrameRequestId = _requestAnimationFrame(callback);
-const cancelAnimationFrame = () => {
-	if (globals.animationFrameRequestId) {
-		_cancelAnimationFrame(globals.animationFrameRequestId)
-		globals.animationFrameRequestId = undefined;
-	}
-};
-
-const synchronizedRender = function(
-	renderCallback,
-	cancelPredicate = Predicates.NEVER,
-	cancelCallback = _ => {},
-	durationAccessor = () => config.animationFrameDuration
-) {
-	const synchronizedRenderCallback = timestamp => {
-		if (cancelPredicate()) {
-			cancelAnimationFrame();
-			cancelCallback(timestamp);
-			return;
-		}
-		if (timestamp - globals.previousExecution < durationAccessor()) {
-			requestAnimationFrame(synchronizedRenderCallback);
-			return;
-		}
-		renderCallback(timestamp);
-		globals.previousExecution = timestamp;
-		requestAnimationFrame(synchronizedRenderCallback);
-	};
-	return synchronizedRenderCallback;
-};
-
-// const drawUniformPass = synchronizedRender(
-// 	_ => globals.wallpaper.matrix.render(droplet => droplet.stepDown()),
-// 	() => globals.wallpaper.matrix.allMatch(droplet => droplet.hasOverflown()),
-// 	_ => {
-// 		globals.wallpaper.matrix.forEach(droplet => droplet.y = 0);
-// 		requestAnimationFrame(drawRain);
-// 	}
-// );
-
-const drawRain = synchronizedRender(_ => globals.wallpaper.matrix.render());
-
-/* Razor & iCue accessories RGB */
+/* RGB Hardware */
 
 window.wallpaperPluginListener = {
     onPluginLoaded: function (name, version) {
@@ -878,11 +865,10 @@ window.wallpaperPluginListener = {
     }
 };
 
-const getEncodedCanvasImageData = canvas => {
+const encodedCanvasForRGBHardware = canvas => {
 	var context = canvas.getContext('2d');
     var imageData = context.getImageData(0, 0, canvas.width, canvas.height);
     var colorArray = [];
-
     for (var d = 0; d < imageData.data.length; d += 4) {
         var write = d / 4 * 3;
         colorArray[write] = imageData.data[d];
@@ -893,6 +879,9 @@ const getEncodedCanvasImageData = canvas => {
 };
 
 const resizeCanvas = (originalCanvas, desiredWidth, desiredHeight) => {
+	const {width, height} = originalCanvas;
+	if (desiredWidth == width && desiredHeight == height)
+		return originalCanvas;
 	const resizedCanvas = document.createElement('canvas');
 	resizedCanvas.width = desiredWidth;
 	resizedCanvas.height = desiredHeight;
@@ -901,22 +890,112 @@ const resizeCanvas = (originalCanvas, desiredWidth, desiredHeight) => {
 	return resizedCanvas;
 };
 
-/* Driver */
+/* Animation */
 
-const MAX_AUDIO_ARRAY_SIZE = 128;
-const MAX_CHANNEL_SIZE = MAX_AUDIO_ARRAY_SIZE/2;
+const _requestAnimationFrame =  window.requestAnimationFrame || window.mozRequestAnimationFrame
+	|| window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
+const _cancelAnimationFrame = window.cancelAnimationFrame || window.mozCancelAnimationFrame;
+
+const requestAnimationFrame = callback => globals.animationFrameRequestId = _requestAnimationFrame(callback);
+const cancelAnimationFrame = () => {
+	if (globals.animationFrameRequestId) {
+		_cancelAnimationFrame(globals.animationFrameRequestId)
+		globals.animationFrameRequestId = undefined;
+	}
+};
+
+const renderingScheduler = function(
+	renderCallbacks,
+	globalCancelPredicate = Predicates.NEVER,
+	globalCancelCallback = _ => {}
+) {
+    let initialized = false;
+	const synchronizedRenderCallback = timestamp => {
+		if (globalCancelPredicate()) {
+			cancelAnimationFrame();
+			globalCancelCallback(timestamp);
+			return;
+		}
+		if (!initialized) {
+			renderCallbacks.forEach(task => {
+				task.lastExecution = timestamp;
+			});
+			initialized = true;
+		}
+		renderCallbacks.forEach((task, index) => {
+            const {
+                renderCallback,
+                durationAccessor,
+                lastExecution,
+                cancelPredicate = Predicates.NEVER,
+                cancelCallback = _ => {}
+            } = task;
+            
+			if (cancelPredicate()) {
+                renderCallbacks.splice(index, 1); // Remove task if canceled
+                cancelCallback(timestamp);
+                return;
+            }
+            if (timestamp - lastExecution >= durationAccessor()) {
+                renderCallback(timestamp);
+                task.lastExecution = timestamp;
+            }
+        });
+        if (renderCallbacks.length > 0)
+            requestAnimationFrame(synchronizedRenderCallback);
+    };
+    return synchronizedRenderCallback;
+};
+
+const drawRain = {
+	renderCallback: _ => {
+		updateCanvas();
+		globals.wallpaper.matrix.render();
+	},
+	durationAccessor: () => config.animationFrameDuration
+};
+
+const drawKeyboardRain = {
+	renderCallback: _ => {
+		if (config.ledPlugin && globals.wallpaper.ctx) {
+			updateKeyboardCanvas();
+			globals.keyboard.matrix.render(droplet => droplet.stepDown());
+		}
+	},
+	durationAccessor: () => config.keyboardAnimationFrameDuration
+};
+
+const tasks = [drawRain, drawKeyboardRain];
+
+/* Driver */
 
 const init = () => {
 	"use strict";
 	globals.wallpaper.canvas = document.getElementById('canvas_matrix');
-	globals.wallpaper.ctx = globals.wallpaper.canvas.getContext("2d", drawingContextOptions);
+	globals.wallpaper.ctx = globals.wallpaper.canvas.getContext('2d', drawingContextOptions);
+	globals.keyboard.canvas = document.createElement('canvas');
+	globals.keyboard.canvas.width = config.keyboardEmulatedSize.width;
+	globals.keyboard.canvas.height = config.keyboardEmulatedSize.height * 4;
+	globals.keyboard.ctx = globals.keyboard.canvas.getContext('2d', drawingContextOptions);
 	updateCanvas(true);
+	updateKeyboardCanvas();
 	setupSpinners();
-	globals.wallpaper.matrix = new Matrix(globals.wallpaper.canvas.width / config.fontSize);
-	config.audioBuckets = globals.wallpaper.matrix.length() / MAX_AUDIO_ARRAY_SIZE;
+	globals.wallpaper.matrix = new Matrix(
+		globals.wallpaper.canvas.width / config.fontSize,
+		globals.wallpaper.canvas,
+		globals.wallpaper.ctx,
+		drawMatrixChar,
+		config.fontSize
+	);
+	globals.keyboard.matrix = new Matrix(
+		config.simulatedKeys.cols,
+		globals.keyboard.canvas,
+		globals.keyboard.ctx,
+		drawKeyboardCell,
+		config.keyboardEmulatedSize.width / config.simulatedKeys.cols
+	);
 	setupWallpaperEngineMediaIntegration();
 
-	// requestAnimationFrame(drawUniformPass);
-	requestAnimationFrame(drawRain);
+	requestAnimationFrame(renderingScheduler(tasks));
 	hookWallpaperEngine();
 };
