@@ -208,10 +208,12 @@ class Matrix {
 	static MAX_AUDIO_ARRAY_SIZE = 128;
 	static MAX_CHANNEL_SIZE = Matrix.MAX_AUDIO_ARRAY_SIZE / 2;
 
-	constructor(cols, canvas, ctx, cellRenderer, size) {
+	constructor(cols, canvas, ctx, cellRenderer, size, dropNum, dropVariability) {
 		this.cols = cols;
+		this.dropNum = dropNum;
+		this.dropVariability = dropVariability;
 		this.drops = range(this.cols).flatMap(x =>
-			range(variableDropCount()).map(() => new Droplet(x, canvas, ctx, cellRenderer, size))
+			range(variableDropCount(dropNum, dropVariability)).map(() => new Droplet(x, canvas, ctx, cellRenderer, size))
 		);
 		this.audioBuckets = this.length() / Matrix.MAX_AUDIO_ARRAY_SIZE;
 	}
@@ -235,7 +237,7 @@ class Matrix {
 		const len = this.length();
 		range(newSize - len)
 			.map(i => i + len)
-			.flatMap(x => range(variableDropCount()).map(() => new Droplet(x)))
+			.flatMap(x => range(variableDropCount(this.dropNum, this.dropVariability)).map(() => new Droplet(x)))
 			.forEach(drop => this.drops.push(drop));
 	}
 
@@ -279,7 +281,7 @@ const getPreferredDropCount = () => Math.round(globals.wallpaper.canvas.width / 
 
 const variableFontSize = () => randOffset(config.fontSize, config.fontSizeVariability);
 
-const variableDropCount = () => Math.round(randOffset(4, 1));
+const variableDropCount = (value=4, variability=1) => Math.round(randOffset(value, variability));
 
 const clearExcept = (x, y, w, h, fill=true) => {
 	const target = fill ? globals.wallpaper.ctx.fillRect : globals.wallpaper.ctx.clearRect;
@@ -313,18 +315,29 @@ const updateCanvas = (resize=false, fill=true) => {
 	globals.wallpaper.ctx.font = `${config.fontSize}px ${config.fontFamily}`;
 	if (config.audioChangeColour && config.albumCoverArtAsciiCanvas !== null)
 		globals.wallpaper.ctx.drawImage(config.albumCoverArtAsciiCanvas.canvas, config.albumBoundingBox.x, config.albumBoundingBox.y);
+	if (config.keyboardDebug)
+		globals.wallpaper.ctx.drawImage(globals.keyboard.canvas, 0, 0);
 };
+
+const drawShrunkWallpaper = () => {
+	globals.keyboard.ctx.drawImage(globals.wallpaper.canvas, 0, 0, config.keyboardEmulatedSize.width, config.keyboardEmulatedSize.height);
+};
+
+const drawKeyboardRainLights = (fill) => {
+	globals.keyboard.ctx.fillStyle = getBackgroundStyle(config.keyboardBackgroundTransparency);
+	const target = fill ? globals.keyboard.ctx.fillRect : globals.keyboard.ctx.clearRect;
+	target.apply(globals.keyboard.ctx, [0, 0, globals.keyboard.canvas.width, globals.keyboard.canvas.height]);
+	globals.keyboard.ctx.fillStyle = getForegroundStyle(config.keyboardForegroundTransparency);
+};
+
+const keyboardStrategies = Object.freeze({
+	shrunk: drawShrunkWallpaper,
+	rain: drawKeyboardRainLights
+});
 
 const updateKeyboardCanvas = (fill=true) => {
 	if (window.wpPlugins && window.wpPlugins.led) {
-		/* Draws mini wallpaper on keyboard */
-		// globals.keyboard.ctx.drawImage(globals.wallpaper.canvas, 0, 0, config.keyboardEmulatedSize.width, config.keyboardEmulatedSize.height);
-		globals.keyboard.ctx.fillStyle = getBackgroundStyle(config.keyboardBackgroundTransparency);
-		const target = fill ? globals.keyboard.ctx.fillRect : globals.keyboard.ctx.clearRect;
-		target.apply(globals.keyboard.ctx, [0, 0, globals.keyboard.canvas.width, globals.keyboard.canvas.height]);
-		globals.keyboard.ctx.fillStyle = getForegroundStyle(config.keyboardForegroundTransparency);
-		if (config.keyboardDebug)
-			globals.wallpaper.ctx.drawImage(globals.keyboard.canvas, 0, 0);
+		keyboardStrategies[config.keyboardDrawingStrategy](fill);
 		const { width, height } = config.keyboardEmulatedSize;
 		const encoded = encodedCanvasForRGBHardware(resizeCanvas(globals.keyboard.canvas, width, height));
 		window.wpPlugins.led.setAllDevicesByImageData(encoded, width, height);
@@ -401,9 +414,9 @@ const decideColor = (val, max, c) => {
 		return;
 	var newVal = Math.round(scale(val, 0, max, 0, 255));
 	switch (c) {
-		case "red" : config.foregroundColour.R = newVal; break;
-		case "green" : config.foregroundColour.G = newVal; break;
-		case "blue" : config.foregroundColour.B = newVal; break;
+		case "red": config.foregroundColour.R = newVal; break;
+		case "green": config.foregroundColour.G = newVal; break;
+		case "blue": config.foregroundColour.B = newVal; break;
 	}
 };
 
@@ -621,9 +634,16 @@ const paramMapping = {
 	},
 	audiofadestrategy: {
 		default: "parabolic",
-		update: strategy => {
-			config.audioFadeStrategy = Object.keys(fadeStrategies).includes(strategy) ? strategy  : "parabolic";
-		}
+		update: strategy => config.audioFadeStrategy = Object.keys(fadeStrategies).includes(strategy) ? strategy  : paramMapping.audiofadestrategy.default,
+	},
+	keyboarddrawingstrategy: {
+		default: "rain",
+		update: strategy => config.keyboardDrawingStrategy = Object.keys(keyboardStrategies).includes(strategy) ? strategy : paramMapping.keyboarddrawingstrategy.default,
+	},
+	keyboarddebug: {
+		default: false,
+		parse: parseBool,
+		update: debug => config.keyboardDebug = debug,
 	},
 	audioalbumxpercent: {
 		default: 0.2,
@@ -687,7 +707,8 @@ const config = {
 	ledPlugin: false,
     cuePlugin: false,
 	keyboardAnimationFrameDuration: 100,
-	keyboardDebug: false,
+	keyboardDebug: paramMapping.keyboarddebug.default,
+	keyboardDrawingStrategy: paramMapping.keyboarddrawingstrategy.default,
 	keyboardForegroundTransparency: 1,
 	keyboardBackgroundTransparency: 0.3,
 	keyboardEmulatedSize: { // it's better to choose something small like 100x20 for performance
@@ -968,7 +989,7 @@ const init = () => {
 	globals.wallpaper.ctx = globals.wallpaper.canvas.getContext('2d', drawingContextOptions);
 	globals.keyboard.canvas = document.createElement('canvas');
 	globals.keyboard.canvas.width = config.keyboardEmulatedSize.width;
-	globals.keyboard.canvas.height = config.keyboardEmulatedSize.height * 4;
+	globals.keyboard.canvas.height = config.keyboardEmulatedSize.height;
 	globals.keyboard.ctx = globals.keyboard.canvas.getContext('2d', drawingContextOptions);
 	updateCanvas(true);
 	updateKeyboardCanvas();
@@ -978,14 +999,18 @@ const init = () => {
 		globals.wallpaper.canvas,
 		globals.wallpaper.ctx,
 		drawMatrixChar,
-		config.fontSize
+		config.fontSize,
+		3,
+		1
 	);
 	globals.keyboard.matrix = new Matrix(
 		config.simulatedKeys.cols,
 		globals.keyboard.canvas,
 		globals.keyboard.ctx,
 		drawKeyboardCell,
-		config.keyboardEmulatedSize.width / config.simulatedKeys.cols
+		config.keyboardEmulatedSize.width / config.simulatedKeys.cols,
+		2,
+		0
 	);
 	setupWallpaperEngineMediaIntegration();
 

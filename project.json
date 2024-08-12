@@ -1,6 +1,6 @@
 {
 	"contentrating" : "Everyone",
-	"description" : "Rain can change color based on the playing media and the albums are drawn using text.\n\n# Color Spinners\n\nRGB sliders can be manipulated by hovering with the mouse as such (or just disable and control from wallpaper engine 🤷):\n- Red: Top of the screen (left: 0, right: 255)\n- Green: Right of the screen (top: 0, bottom: 255)\n- Blue: Bottom of the screen (right: 0, left: 255)\n\n# Audio Reactions\n\nAudio reaction can be disabled or you can choose between the default:\n- rain drops flowing backwards (if their respective frequencies have sound above a threshold)\n- or alternatively rain drops freeze on audio",
+	"description" : "Rain can change color based on the playing media and the albums are drawn using text (added RGB hardware support).\n\n# Color Spinners\n\nRGB sliders can be manipulated by hovering with the mouse as such (or just disable and control from wallpaper engine 🤷):\n- Red: Top of the screen (left: 0, right: 255)\n- Green: Right of the screen (top: 0, bottom: 255)\n- Blue: Bottom of the screen (right: 0, left: 255)\n\n# Audio Reactions\n\nAudio reaction can be disabled or you can choose between the default:\n- rain drops flowing backwards (if their respective frequencies have sound above a threshold)\n- or alternatively rain drops freeze on audio",
 	"file" : "index.html",
 	"general" : 
 	{
@@ -194,6 +194,33 @@
 				"type" : "slider",
 				"value" : 3
 			},
+			"keyboarddebug" : 
+			{
+				"index" : 20,
+				"order" : 120,
+				"text" : "keyboarddebug",
+				"type" : "bool",
+				"value" : false
+			},
+			"keyboarddrawingstrategy" : 
+			{
+				"index" : 19,
+				"options" : 
+				[
+					{
+						"label" : "shrunk",
+						"value" : "shrunk"
+					},
+					{
+						"label" : "rain",
+						"value" : "rain"
+					}
+				],
+				"order" : 119,
+				"text" : "keyboarddrawingstrategy",
+				"type" : "combo",
+				"value" : "rain"
+			},
 			"rainresetchance" : 
 			{
 				"fraction" : true,
@@ -233,7 +260,7 @@
 	"tags" : [ "Abstract" ],
 	"title" : "Responsive Matrix",
 	"type" : "web",
-	"version" : 21,
+	"version" : 26,
 	"visibility" : "public",
 	"workshopid" : "1605157424",
 	"workshopurl" : "steam://url/CommunityFilePage/1605157424"
