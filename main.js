@@ -851,9 +851,11 @@ const wallpaperMediaPlaybackListener = event => {
 		case window.wallpaperMediaIntegration.PLAYBACK_PLAYING:
 			break;
 		case window.wallpaperMediaIntegration.PLAYBACK_STOPPED:
-			config.rainResetChance = config.currentRainResetChance;
 		case window.wallpaperMediaIntegration.PLAYBACK_PAUSED:
-		default: /* nada */;
+		default: 
+			/* Breaks crossfade somehow lol 
+			config.rainResetChance = config.currentRainResetChance;
+			*/;
 	}
 };
 
