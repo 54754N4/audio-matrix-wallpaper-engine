@@ -35,6 +35,16 @@ const parseHexColour = hex => {
 	};
 };
 
+const rgbify = (r,g,b) => ({R: r, G: g, B: b});
+
+const COLORS = Object.freeze({
+	BLACK: parseHexColour("#000000"),
+	RED: parseHexColour("#FF0000"),
+	GREEN: parseHexColour("#00FF00"),
+	BLUE: parseHexColour("#0000FF"),
+	WHITE: parseHexColour("#FFFFFF"),
+});
+
 const numTo2DigitHex = num => num.toString(16).padStart(2, '0');
 
 const colourToString = ({R, G, B}) => `#${numTo2DigitHex(R)}${numTo2DigitHex(G)}${numTo2DigitHex(B)}`;
@@ -110,7 +120,7 @@ class Polynomial2 {
 			this.r2 = c;
 			this.b = - a * (b + c);
 			this.c = a * b * c;
-			// Since: a(x-r1)(x-r2) == a.x^2 -a.(r2 + r1).x + a.r1.r2)
+			// Since: a(x-r1)(x-r2) == a.x^2 - a.(r2 + r1).x + a.r1.r2
 		} else {
 			this.a = a;
 			this.b = b;
@@ -133,8 +143,16 @@ class Polynomial2 {
 	applyNormalized = x => this.apply(x) / this.vertex.y;
 }
 
-const drawMatrixChar = (ctx, actualX, actualY) => {
-	const text = config.alphabet[Math.floor(Math.random() * config.alphabet.length)];
+const drawMatrixChar = (ctx, actualX, actualY, size) => {
+	const playing = config.audioPlaybackState == window.wallpaperMediaIntegration.PLAYBACK_PLAYING;
+	const x = actualX / size, y = actualY / size;
+	let text;
+	if (playing && y === 0 && 0 <= x && x < config.trackTitle.innerText.length)
+		text = config.trackTitle.innerText[x];
+	else if (playing && y === 1 && 0 <= x && x < config.artist.innerText.length)
+		text = config.artist.innerText[x];
+	else
+		text = config.alphabet[Math.floor(Math.random() * config.alphabet.length)];
 	ctx.fillText(text, actualX, actualY);
 };
 
@@ -176,7 +194,7 @@ class Droplet {
 	hasUnderflown = () => this.y < 0;
 
 	render() {
-		const overAlbum = collisionDectection.rect2rect(
+		const overAlbum = !config.audioAlbumChangeColour || config.audioPlaybackState !== window.wallpaperMediaIntegration.PLAYBACK_PLAYING ? false : collisionDectection.rect2rect(
 			this.actualX, this.actualY - this.size,
 			this.size, this.size,
 			config.albumBoundingBox.x, config.albumBoundingBox.y,
@@ -313,8 +331,11 @@ const updateCanvas = (resize=false, fill=true) => {
 	target.apply(globals.wallpaper.ctx, [0, 0, globals.wallpaper.canvas.width, globals.wallpaper.canvas.height]);
 	globals.wallpaper.ctx.fillStyle = getForegroundStyle();
 	globals.wallpaper.ctx.font = `${config.fontSize}px ${config.fontFamily}`;
-	if (config.audioChangeColour && config.albumCoverArtAsciiCanvas !== null)
+	if (config.audioChangeColour 
+		&& config.albumCoverArtAsciiCanvas !== null
+		&& config.audioPlaybackState !== window.wallpaperMediaIntegration.PLAYBACK_STOPPED) {
 		globals.wallpaper.ctx.drawImage(config.albumCoverArtAsciiCanvas.canvas, config.albumBoundingBox.x, config.albumBoundingBox.y);
+	}
 	if (config.keyboardDebug)
 		globals.wallpaper.ctx.drawImage(globals.keyboard.canvas, 0, 0);
 };
@@ -529,11 +550,7 @@ const paramMapping = {
 		},
 	},
 	fgcolour: {
-		default: {
-			R: 255,
-			G: 0,
-			B: 0,
-		},
+		default: COLORS.RED,
 		parse: parseColour,
 		update: colour => {
 			if (colour.length != 3) {
@@ -548,11 +565,7 @@ const paramMapping = {
 		},
 	},
 	bgcolour: {
-		default: {
-			R: 0,
-			G: 0,
-			B: 0
-		},
+		default: COLORS.BLACK,
 		parse: parseColour,
 		update: colour => {
 			if (colour.length != 3) {
@@ -612,6 +625,11 @@ const paramMapping = {
 				};
 			}
 		},
+	},
+	audioalbumchangecolour: {
+		default: false,
+		parse: parseBool,
+		update: change => config.audioAlbumChangeColour = change,
 	},
 	audiochangeraincolouronly: {
 		default: true,
@@ -693,6 +711,7 @@ const config = {
 	audioReactThreshold: paramMapping.audioreactthreshold.default,
 	audioReactFreeze: paramMapping.audioreactfreeze.default,
 	audioChangeColour: paramMapping.audiochangecolour.default,	// overrides colorSpinners
+	audioAlbumChangeColour: paramMapping.audioalbumchangecolour.default,
 	audioChangeRainColourOnly: paramMapping.audiochangeraincolouronly.default,
 	audioAlbumXPercent: paramMapping.audioalbumxpercent.default,
 	audioAlbumYPercent: paramMapping.audioalbumypercent.default,
@@ -741,7 +760,7 @@ const changeColors = (fgColour, bgColour) => {
 		config.invertedForegroundColour = colourInverted(config.foregroundColour = fgColour);
 	if (bgColour)
 		config.invertedBackgroundColour = colourInverted(config.backgroundColour = bgColour);
-	updateCanvas(false, false);
+	updateCanvas(false, true);
 	removeRainGlareHack();
 };
 
@@ -782,7 +801,9 @@ const fadeStrategies = Object.freeze({
 /* Wallpaper engine */
 // Media event properties docs: https://docs.wallpaperengine.io/en/web/audio/media.html#available-media-integration-listeners
 
-const wallpaperAudioListener = audioArray => globals.wallpaper.matrix.handleAudioEvent(audioArray);
+const wallpaperAudioListener = audioArray => {
+	globals.wallpaper.matrix.handleAudioEvent(audioArray);
+};
 
 const wallpaperMediaStatusListener = event => {
 	console.log("status", event); // todo remove
@@ -803,7 +824,13 @@ const wallpaperMediaThumbnailListener = event => {
 		config.artist.style.color = event.textColor;
 		config.songTextColour = parseHexColour(event.textColor);
 		config.songPrimaryColour = parseHexColour(event.primaryColor);
+		const equalityThreshold = 15;
 		let fgcol, bgcol;
+		// sometimes WE sends double black for whatever reason lol
+		if (colorDistance(config.songTextColour, config.songPrimaryColour) <= equalityThreshold) {
+			fgcol = colourInverted(config.songTextColour);
+			bgcol = config.songPrimaryColour;
+		}
 		if (config.audioChangeRainColourOnly) {
 			fgcol = colorDistance(config.userBackgroundColour, config.songPrimaryColour) < config.colorDistanceThreshold ?
 				colorAlongVector(config.userBackgroundColour, config.songPrimaryColour) :
@@ -824,10 +851,9 @@ const wallpaperMediaPlaybackListener = event => {
 		case window.wallpaperMediaIntegration.PLAYBACK_PLAYING:
 			break;
 		case window.wallpaperMediaIntegration.PLAYBACK_STOPPED:
+			config.rainResetChance = config.currentRainResetChance;
 		case window.wallpaperMediaIntegration.PLAYBACK_PAUSED:
-		default: 
-			// breaks crossfade cause WE doesn't send playback events lol?..
-			// config.rainResetChance = config.currentRainResetChance;
+		default: /* nada */;
 	}
 };
 
