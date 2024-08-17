@@ -143,21 +143,41 @@ class Polynomial2 {
 	applyNormalized = x => this.apply(x) / this.vertex.y;
 }
 
-const drawMatrixChar = (ctx, actualX, actualY, size) => {
-	const playing = config.audioPlaybackState == window.wallpaperMediaIntegration.PLAYBACK_PLAYING;
-	const x = actualX / size, y = actualY / size;
+const drawMatrixChar = drop => {
+	const { ctx, actualX, actualY, size } = drop;
+	const middleColumn = Math.floor(globals.wallpaper.matrix.cols / 2);
+	const [row1, row2] = [{}, {}];
+	row1.text = config.trackTitle.textContent;
+	row1.x = (middleColumn - Math.floor(row1.text.length / 2)) * size;
+	row1.y = config.albumBoundingBox.y + config.albumBoundingBox.height + 2 * size;
+	row1.collision = collisionDectection.rect2rect(
+		actualX, actualY, size, size,
+		row1.x, row1.y, row1.text.length * size, size);
+	row2.text = config.artist.textContent;
+	row2.x = (middleColumn - Math.floor(row2.text.length / 2)) * size;
+	row2.y = config.albumBoundingBox.y + config.albumBoundingBox.height + size;
+	row2.collision = collisionDectection.rect2rect(
+		actualX, actualY, size, size,
+		row2.x, row2.y, row2.text.length * size, size);
 	let text;
-	if (playing && y === 0 && 0 <= x && x < config.trackTitle.innerText.length)
-		text = config.trackTitle.innerText[x];
-	else if (playing && y === 1 && 0 <= x && x < config.artist.innerText.length)
-		text = config.artist.innerText[x];
+	const playing = config.audioPlaybackState == window.wallpaperMediaIntegration.PLAYBACK_PLAYING;
+	ctx.save();
+	if (playing && (row1.collision || row2.collision)) {
+		ctx.shadowColor = getInvertedForegroundStyle();
+		ctx.shadowBlur = 3;
+	}
+	if (playing && row1.collision)
+		text = row1.text[drop.x - Math.floor(row1.x / size)];
+	else if (playing && row2.collision)
+		text = row2.text[drop.x - Math.floor(row2.x / size)];
 	else
 		text = config.alphabet[Math.floor(Math.random() * config.alphabet.length)];
 	ctx.fillText(text, actualX, actualY);
+	ctx.restore();
 };
 
-const drawKeyboardCell = (ctx, actualX, actualY, size) => {
-	ctx.fillRect(actualX, actualY, size, size);
+const drawKeyboardCell = drop => {
+	drop.ctx.fillRect(drop.actualX, drop.actualY, drop.size, drop.size);
 };
 
 class Droplet {
@@ -204,7 +224,7 @@ class Droplet {
 			this.ctx.save();
 			this.ctx.fillStyle = getInvertedForegroundStyle();
 		}
-		this.cellRenderer(this.ctx, this.actualX, this.actualY, this.size);
+		this.cellRenderer(this);
 		if (overAlbum) {
 			this.ctx.restore();
 			return;	// optimisation - we know it doesn't need reset at this point
