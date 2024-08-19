@@ -183,7 +183,7 @@ const drawKeyboardCell = drop => {
 class Droplet {
 	constructor(x, canvas, ctx, cellRenderer = drawMatrixChar, size = config.fontSize) {
 		this.x = x;
-		this.y = 1;
+		this.y = 0;
 		this.dy = 1;
 		this.offset = 1;
 		this.size = size;
@@ -210,7 +210,7 @@ class Droplet {
 		this.y += offset;
 	}
 
-	hasOverflown = () => this.y * this.size >= this.canvas.height;
+	hasOverflown = () => this.y * this.size > this.canvas.height;
 	hasUnderflown = () => this.y < 0;
 
 	render() {
@@ -235,7 +235,7 @@ class Droplet {
 				this.size = variableFontSize();
 		}
 		else if (this.hasOverflown() && Math.random() < config.rainResetChance) {
-			this.y = 0;
+			this.y = -1;
 			if (config.variableFontSize)
 				this.size = variableFontSize();
 		}
@@ -581,7 +581,7 @@ const paramMapping = {
 				config.userForegroundColour.G = colour[1];
 				config.userForegroundColour.B = colour[2];
 			}
-			changeColors(config.userForegroundColour, config.backgroundColour);
+			changeColours(config.userForegroundColour, config.backgroundColour);
 		},
 	},
 	bgcolour: {
@@ -596,7 +596,7 @@ const paramMapping = {
 				config.userBackgroundColour.G = colour[1];
 				config.userBackgroundColour.B = colour[2];
 			}
-			changeColors(config.foregroundColour, config.userBackgroundColour);
+			changeColours(config.foregroundColour, config.userBackgroundColour);
 		},
 	},
 	colorspinners: {
@@ -748,7 +748,7 @@ const config = {
 	keyboardAnimationFrameDuration: 100,
 	keyboardDebug: paramMapping.keyboarddebug.default,
 	keyboardDrawingStrategy: paramMapping.keyboarddrawingstrategy.default,
-	keyboardForegroundTransparency: 1,
+	keyboardForegroundTransparency: 0.9,
 	keyboardBackgroundTransparency: 0.3,
 	keyboardEmulatedSize: { // it's better to choose something small like 100x20 for performance
 		width: 100,
@@ -775,12 +775,13 @@ const globals = {
 	previousExecution: document.timeline.currentTime,
 };
 
-const changeColors = (fgColour, bgColour) => {
+const changeColours = (fgColour, bgColour) => {
 	if (fgColour)
 		config.invertedForegroundColour = colourInverted(config.foregroundColour = fgColour);
 	if (bgColour)
 		config.invertedBackgroundColour = colourInverted(config.backgroundColour = bgColour);
-	updateCanvas(false, true);
+	updateCanvas(false, false);
+	updateKeyboardCanvas(false);
 	removeRainGlareHack();
 };
 
@@ -860,7 +861,7 @@ const wallpaperMediaThumbnailListener = event => {
 			fgcol = config.songTextColour;
 			bgcol = config.songPrimaryColour;
 		}
-		changeColors(fgcol, bgcol);
+		changeColours(fgcol, bgcol);
 	}
 };
 
