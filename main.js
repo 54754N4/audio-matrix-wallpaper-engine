@@ -305,14 +305,6 @@ class Matrix {
 			dropletConsumer(droplet);
 		}
 	}
-
-	handleAudioEvent(audioArray) {
-		const negativeDirection = config.audioReactFreeze ? 0 : -1;
-		for (const droplet of this.droplets()) {
-			const bucket = Math.floor(droplet.x / this.audioBuckets);
-			droplet.dy = audioArray[bucket] > config.audioReactThreshold ? negativeDirection : 1;
-		}
-	}
 }
 
 const getPreferredDropCount = () => Math.round(globals.wallpaper.canvas.width / config.fontSize);
@@ -823,7 +815,22 @@ const fadeStrategies = Object.freeze({
 // Media event properties docs: https://docs.wallpaperengine.io/en/web/audio/media.html#available-media-integration-listeners
 
 const wallpaperAudioListener = audioArray => {
-	globals.wallpaper.matrix.handleAudioEvent(audioArray);
+	const negativeDirection = config.audioReactFreeze ? 0 : -1;
+	for (const droplet of globals.wallpaper.matrix.droplets()) {
+		const bucket = Math.floor(droplet.x / globals.wallpaper.matrix.audioBuckets);
+		droplet.dy = audioArray[bucket] > config.audioReactThreshold ? negativeDirection : 1;
+	}
+	const group = Math.floor(Matrix.MAX_AUDIO_ARRAY_SIZE / globals.keyboard.matrix.length());
+	mainLoop: for (const droplet of globals.keyboard.matrix.droplets()) {
+		const start = droplet.x * group;
+		for (let i=0; i<group; ++i) {
+			if (start + i < audioArray.length && audioArray[start + i] > config.audioReactThreshold) {
+				droplet.dy = negativeDirection;
+				continue mainLoop;
+			}
+		}
+		droplet.dy = 1;
+	}
 };
 
 const wallpaperMediaStatusListener = event => {
@@ -1022,7 +1029,7 @@ const drawKeyboardRain = {
 	renderCallback: _ => {
 		if (config.ledPlugin && globals.wallpaper.ctx) {
 			updateKeyboardCanvas();
-			globals.keyboard.matrix.render(droplet => droplet.stepDown());
+			globals.keyboard.matrix.render();
 		}
 	},
 	durationAccessor: () => config.keyboardAnimationFrameDuration
@@ -1058,7 +1065,7 @@ const init = () => {
 		globals.keyboard.ctx,
 		drawKeyboardCell,
 		config.keyboardEmulatedSize.width / config.simulatedKeys.cols,
-		2,
+		1,
 		0
 	);
 	setupWallpaperEngineMediaIntegration();
