@@ -3,7 +3,7 @@ const fontName = "Courier New";
 
 const canvas = document.createElement('canvas');
 const ctx = canvas.getContext("2d", {
-    alpha: false,
+    alpha: true,
     willReadFrequently: true,   // https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently
 });
 
@@ -201,7 +201,6 @@ const calculateDensityChar = (...char) => {
 
 
 (function benchamrk() {
-    const BUFFER_LIMIT = 256;
     const buffer = {
         memory: [],
         sort: () => buffer.memory = buffer.memory.sort(buffer.comparator),
@@ -210,7 +209,7 @@ const calculateDensityChar = (...char) => {
    
     const MAX = 149813;
 
-    (function printPercentage(seconds=1) {
+    (function printPercentage(seconds=5) {
         const startTime = Date.now();
         const printPercentageCallback = () => {
             const currentLength = buffer.memory.length;
@@ -226,7 +225,7 @@ const calculateDensityChar = (...char) => {
     })();
 
     const unicodeGenerator = unicodeCodepointRange();
-    const delay = 1;
+    const delay = 4;
     const onDone = () => console.log(JSON.stringify(buffer.memory));
     let i=0, char, timeoutId;
 
