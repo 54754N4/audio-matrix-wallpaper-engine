@@ -1,11 +1,12 @@
 ## Audio Matrix Wallpaper
 
-Shitty version of an audio matrix wallpaper for fun
-
-### Audio/Media Integration
-
-Audio/Media integration thanks to `Wallpaper Engine`
+Shitty version of an audio matrix wallpaper for fun (Audio/Media/RGB-hardware integration is all through `Wallpaper Engine`)
 
 #### Song Transition Preview
 
-[Image](song-transition.gif)
+Gif:
+[Image](images/song-transition.gif)
+
+
+MP4:
+[Video](images/demo.mp4)
