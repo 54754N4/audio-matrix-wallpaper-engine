@@ -183,10 +183,12 @@ const drawKeyboardCell = drop => {
 class Droplet {
 	constructor(x, canvas, ctx, cellRenderer = drawMatrixChar, size = config.fontSize) {
 		this.x = x;
-		this.y = 0;
+		this.y = -1;
 		this.dy = 1;
 		this.offset = 1;
 		this.size = size;
+		this.resetUnderflow = Math.floor(canvas.height / size) + 1;
+		this.resetOverflow = -1;
 		this.canvas = canvas;
 		this.ctx = ctx;
 		this.cellRenderer = cellRenderer;
@@ -202,6 +204,13 @@ class Droplet {
 
 	step = () => {
 		this.y += this.dy * this.offset;
+		const underflow = this.hasUnderflown();
+		const overflow = this.hasOverflown() && Math.random() < config.rainResetChance;
+		if (underflow || overflow) {
+			this.y = underflow ? this.resetUnderflow : this.resetOverflow;
+			if (config.variableFontSize)
+				this.size = variableFontSize();
+		}
 	}
 
 	stepDown = (offset=null) => {
@@ -225,20 +234,9 @@ class Droplet {
 			this.ctx.fillStyle = getInvertedForegroundStyle();
 		}
 		this.cellRenderer(this);
-		if (overAlbum) {
+		if (overAlbum)
 			this.ctx.restore();
-			return;	// optimisation - we know it doesn't need reset at this point
-		}
-		const underflow = this.hasUnderflown();
-		const overflow = this.hasOverflown() && Math.random() < config.rainResetChance;
-		if (underflow || overflow) {
-			if (underflow)
-				this.y = Math.floor(this.canvas.height / this.size) + 1;
-			else
-				this.y = -1;
-			if (config.variableFontSize)
-				this.size = variableFontSize();
-		}
+		return overAlbum;
 	}
 }
 
@@ -299,11 +297,41 @@ class Matrix {
 		return true;
 	}
 
-	render(dropletConsumer = droplet => droplet.step()) {
-		for (const droplet of this.droplets()) {
-			droplet.render();
-			dropletConsumer(droplet);
+	handleJuxtaposedDroplets() {
+		const len = this.dropCount;
+		let count = 0;
+		for(let i = 0; i < len - 1; ++i) {
+			if (this.drops[i].y == this.drops[i+1].y) {
+				count++;
+			} else if (count > 0) {
+				this.handleJuxtaposedDropletRange(i - count, count);
+				count = 0;
+			}
 		}
+	}
+
+	handleJuxtaposedDropletRange(start, length) {
+		const overflow = this.drops[start].y == this.resetOverflow;
+		if (length == 1) {
+			this.drops[start].y += overflow ? 1 : -1;
+			return;
+		}
+		const middle = start + (length >> 1);
+		const end = start + length;
+		const bottom = this.drops[start].resetUnderflow;
+		for (var i=start; i<end; ++i) {
+			let droplet = this.drops[i];
+			if (droplet === null)
+				continue;
+			const offset = i < middle ? i - start : end - i + 2;
+			droplet.y = overflow ? offset : bottom - offset;
+		}
+	}
+
+	render(dropletConsumer = droplet => droplet.step()) {
+		this.forEach(droplet => droplet.render())
+		this.handleJuxtaposedDroplets();
+		this.forEach(dropletConsumer)
 	}
 }
 
@@ -544,8 +572,9 @@ const paramMapping = {
 		parse: parseBool,
 		update: vary => {
 			config.variableFontSize = vary;
-			for (const drop of globals.wallpaper.matrix.droplets())
-				drop.fontSize = vary ? variableFontSize() : config.fontSize ? config.fontSize : paramMapping.fontsize.default;
+			if (globals.wallpaper.matrix !== null)
+				for (const drop of globals.wallpaper.matrix.droplets())
+					drop.fontSize = vary ? variableFontSize() : config.fontSize ? config.fontSize : paramMapping.fontsize.default;
 		},
 	},
 	fontsizevariability: {

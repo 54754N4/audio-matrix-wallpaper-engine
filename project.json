@@ -10,10 +10,10 @@
 			{
 				"condition" : "audiochangecolour.value",
 				"fraction" : false,
-				"index" : 12,
+				"index" : 13,
 				"max" : 100,
 				"min" : 1,
-				"order" : 112,
+				"order" : 113,
 				"text" : "albumfontsize",
 				"type" : "slider",
 				"value" : 15
@@ -37,14 +37,23 @@
 				"type" : "slider",
 				"value" : 30
 			},
+			"audioalbumchangecolour" : 
+			{
+				"condition" : "audiochangecolour.value",
+				"index" : 11,
+				"order" : 111,
+				"text" : "audioalbumchangecolour",
+				"type" : "bool",
+				"value" : false
+			},
 			"audioalbumxpercent" : 
 			{
 				"condition" : "audiochangecolour.value",
 				"fraction" : true,
-				"index" : 17,
+				"index" : 18,
 				"max" : 1,
 				"min" : 0,
-				"order" : 117,
+				"order" : 118,
 				"precision" : 3,
 				"step" : 0.01,
 				"text" : "audioalbumxpercent",
@@ -55,10 +64,10 @@
 			{
 				"condition" : "audiochangecolour.value",
 				"fraction" : true,
-				"index" : 18,
+				"index" : 19,
 				"max" : 1,
 				"min" : 0,
-				"order" : 118,
+				"order" : 119,
 				"precision" : 3,
 				"step" : 0.01,
 				"text" : "audioalbumypercent",
@@ -87,10 +96,10 @@
 			{
 				"condition" : "audiochangecoulour.value && audiofadeinrain.value",
 				"fraction" : false,
-				"index" : 15,
+				"index" : 16,
 				"max" : 30,
 				"min" : 0,
-				"order" : 115,
+				"order" : 116,
 				"text" : "audiofadeinduration",
 				"type" : "slider",
 				"value" : 1
@@ -98,8 +107,8 @@
 			"audiofadeinrain" : 
 			{
 				"condition" : "audiochangecolour.value",
-				"index" : 13,
-				"order" : 113,
+				"index" : 14,
+				"order" : 114,
 				"text" : "audiofadeinrain",
 				"type" : "bool",
 				"value" : true
@@ -107,7 +116,7 @@
 			"audiofadestrategy" : 
 			{
 				"condition" : "audiochangecolour.value && audiofadeinrain.value",
-				"index" : 14,
+				"index" : 15,
 				"options" : 
 				[
 					{
@@ -119,7 +128,7 @@
 						"value" : "parabolic"
 					}
 				],
-				"order" : 114,
+				"order" : 115,
 				"text" : "audiofadestrategy",
 				"type" : "combo",
 				"value" : "parabolic"
@@ -127,8 +136,8 @@
 			"audioreactfreeze" : 
 			{
 				"condition" : "audiochangecolour.value",
-				"index" : 16,
-				"order" : 116,
+				"index" : 17,
+				"order" : 117,
 				"text" : "audioreactfreeze",
 				"type" : "bool",
 				"value" : false
@@ -137,10 +146,10 @@
 			{
 				"condition" : "audiochangecolour.value",
 				"fraction" : true,
-				"index" : 11,
+				"index" : 12,
 				"max" : 1,
 				"min" : 0,
-				"order" : 111,
+				"order" : 112,
 				"precision" : 4,
 				"step" : 0.001,
 				"text" : "audioreactthreshold",
@@ -196,15 +205,15 @@
 			},
 			"keyboarddebug" : 
 			{
-				"index" : 20,
-				"order" : 120,
+				"index" : 21,
+				"order" : 121,
 				"text" : "keyboarddebug",
 				"type" : "bool",
 				"value" : false
 			},
 			"keyboarddrawingstrategy" : 
 			{
-				"index" : 19,
+				"index" : 20,
 				"options" : 
 				[
 					{
@@ -216,7 +225,7 @@
 						"value" : "rain"
 					}
 				],
-				"order" : 119,
+				"order" : 120,
 				"text" : "keyboarddrawingstrategy",
 				"type" : "combo",
 				"value" : "rain"
@@ -255,12 +264,10 @@
 	"preview" : "preview.gif",
 	"ratingsex" : "none",
 	"ratingviolence" : "none",
-	"snapshotformat" : 4,
-	"snapshotoverlay" : "",
 	"tags" : [ "Abstract" ],
 	"title" : "Responsive Matrix",
-	"type" : "web",
-	"version" : 26,
+	"type" : "Web",
+	"version" : 30,
 	"visibility" : "public",
 	"workshopid" : "1605157424",
 	"workshopurl" : "steam://url/CommunityFilePage/1605157424"
