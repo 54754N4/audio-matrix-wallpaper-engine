@@ -187,6 +187,8 @@ class Droplet {
 		this.dy = 1;
 		this.offset = 1;
 		this.size = size;
+		this.resetUnderflow = Math.floor(this.canvas.height / this.size) + 1;
+		this.resetOverflow = -1;
 		this.canvas = canvas;
 		this.ctx = ctx;
 		this.cellRenderer = cellRenderer;
@@ -202,6 +204,13 @@ class Droplet {
 
 	step = () => {
 		this.y += this.dy * this.offset;
+		const underflow = this.hasUnderflown();
+		const overflow = this.hasOverflown() && Math.random() < config.rainResetChance;
+		if (underflow || overflow) {
+			this.y = underflow ? this.resetUnderflow : this.resetOverflow;
+			if (config.variableFontSize)
+				this.size = variableFontSize();
+		}
 	}
 
 	stepDown = (offset=null) => {
@@ -225,20 +234,9 @@ class Droplet {
 			this.ctx.fillStyle = getInvertedForegroundStyle();
 		}
 		this.cellRenderer(this);
-		if (overAlbum) {
+		if (overAlbum)
 			this.ctx.restore();
-			return;	// optimisation - we know it doesn't need reset at this point
-		}
-		const underflow = this.hasUnderflown();
-		const overflow = this.hasOverflown() && Math.random() < config.rainResetChance;
-		if (underflow || overflow) {
-			if (underflow)
-				this.y = Math.floor(this.canvas.height / this.size) + 1;
-			else
-				this.y = -1;
-			if (config.variableFontSize)
-				this.size = variableFontSize();
-		}
+		return overAlbum;
 	}
 }
 
@@ -299,11 +297,52 @@ class Matrix {
 		return true;
 	}
 
-	render(dropletConsumer = droplet => droplet.step()) {
-		for (const droplet of this.droplets()) {
-			droplet.render();
-			dropletConsumer(droplet);
+	handleJuxtaposedDroplets() {
+		const len = this.dropCount;
+		const top = this.drops[0].resetUnderflow;
+		const bottom = this.drops[0].resetOverflow;
+		let count = 0;
+		for(let i = 0; i < len - 1; ++i) {
+			const current = this.drops[i];
+			const next = this.drops[i+1];
+			if (current.y == top + 1 || current.y == bottom - 1) {
+				if (current.y == next.y) {
+					count++;
+				} else if (count > 0) {
+					handleJuxtaposedDropletRange(i - count, i);
+					count = 0;
+				}
+			}
 		}
+	}
+
+	handleJuxtaposedDropletRange(start, length) {
+		const overflow = this.drops[start].y == this.resetOverflow;
+		if (length == 1) {
+			if (overflow)
+				this.drops[start].y++;
+			else
+				this.drops[start].y--;
+		}
+		const middle = start + (length >> 1);
+		const end = start + length;
+		const bottom = this.drops[start].resetUnderflow;
+		const heightCalc = overflow ?	// extracts if out of loop but needs a lambda instead, let's see :shrug:
+			i => i :
+			i => bottom - i;
+		for (var i=start; i<end; ++i) {
+			const droplet = this.drops[i];
+			const offset = i < middle ?
+				i - start :
+				end - i + 2;
+			droplet.y = heightCalc(offset);
+		}
+	}
+
+	render(dropletConsumer = droplet => droplet.step()) {
+		this.forEach(droplet => droplet.render())
+		this.handleJuxtaposedDroplets();
+		this.forEach(dropletConsumer)
 	}
 }
 
